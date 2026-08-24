@@ -148,7 +148,12 @@ const genPreamble = (sourceUrl: string, needsUrljoin: boolean): string => [
     '    # html5lib (not html.parser) parses the way a browser renders —',
     '    # e.g. it inserts the <tbody> browsers always add to tables, which',
     '    # selectors picked from the live preview rely on.',
-    '    return BeautifulSoup(response.text, "html5lib")',
+    '    #',
+    '    # response.content (raw bytes), not response.text: a server that sends',
+    '    # Content-Type: text/html with no charset makes requests guess',
+    '    # ISO-8859-1 even when the body is actually UTF-8, silently mangling',
+    '    # non-ASCII text. Raw bytes let BeautifulSoup detect the real encoding.',
+    '    return BeautifulSoup(response.content, "html5lib")',
 ].filter((l): l is string => l !== null).join('\n')
 
 const genSimpleMain = (functions: FnGroup[], names: Map<string, string>): string => [

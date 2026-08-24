@@ -58,7 +58,14 @@ def bundle_page(url: str) -> str:
     # (implicit <tbody> in tables, etc.), matching what the frontend's
     # iframe preview actually renders. The generated Python code parses with
     # the same backend for the same reason — see front/src/lib/codegen.ts.
-    soup = BeautifulSoup(response.text, "html5lib")
+    #
+    # response.content (raw bytes), not response.text: when a server sends
+    # Content-Type: text/html with no charset (very common — books.toscrape.com
+    # does this), requests falls back to guessing ISO-8859-1 per old HTTP
+    # defaults even when the body is actually UTF-8, silently mangling
+    # non-ASCII text (e.g. "£" -> "Â£"). Handing BeautifulSoup the raw bytes
+    # lets it sniff the real encoding itself, which is far more reliable.
+    soup = BeautifulSoup(response.content, "html5lib")
 
     base_tag = soup.find("base", href=True)
     base_url = urljoin(url, base_tag["href"]) if base_tag else url
