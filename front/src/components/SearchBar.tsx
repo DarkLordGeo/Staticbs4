@@ -6,6 +6,7 @@ import { emptyConfigFor, isConfigComplete } from '../types/builder'
 import { absoluteSelector, fieldSelectorFor, groupSelector, nearestRepeatingElement } from '../lib/selector'
 import { runExtraction, type ExtractionResult } from '../lib/extract'
 import { loadWorkspace, saveWorkspace } from '../lib/persistence'
+import { detectFields, type FieldCandidate } from '../lib/autoFields'
 
 // Applied to every element matched by a 'list' function's item selector, so
 // picking one row visibly highlights the *whole group* it generalized to —
@@ -53,6 +54,16 @@ const SearchBar = () => {
   // only 'field' picks need a name prompt — main-slot picks apply immediately
   const [naming, setNaming] = useState<ElementRef | null>(null)
   const [nameInput, setNameInput] = useState("")
+
+  // Suggested sub-fields for the just-picked list item, offered as a bulk
+  // checklist instead of making the user manually pick each column/field.
+  const [detectedFields, setDetectedFields] = useState<FieldCandidate[] | null>(null)
+
+  // How many times the just-picked element repeats on the page — set only
+  // for non-'list' picks, so picking a repeating card as e.g. 'Header' (which
+  // just concatenates all its text into one blob) can be flagged with a
+  // nudge toward 'List' instead.
+  const [repeatHint, setRepeatHint] = useState<number | null>(null)
 
   // How many elements the current 'list' function's item selector actually
   // matches — null when there's nothing to report (no item picked / not a
@@ -187,6 +198,19 @@ const SearchBar = () => {
           setNaming(ref)
         } else {
           applyMainPick(ref)
+          if (isListItemPick) {
+            setDetectedFields(detectFields(target))
+            setRepeatHint(null)
+          } else {
+            setDetectedFields(null)
+            // Same repeat-detection used for list items, applied here purely
+            // as a hint: does this element (picked for a single-target
+            // category) actually repeat elsewhere on the page? If so, its
+            // whole-subtree get_text() is probably not what was wanted.
+            let count = 0
+            try { count = doc.querySelectorAll(groupSelector(nearestRepeatingElement(clicked))).length } catch { /* invalid selector — no hint */ }
+            setRepeatHint(count > 1 ? count : null)
+          }
         }
         setPickTarget(null)
       }
@@ -204,6 +228,29 @@ const SearchBar = () => {
     setDraftConfig(emptyConfigFor(category))
     setPickTarget(null)
     setNaming(null)
+    setDetectedFields(null)
+    setRepeatHint(null)
+  }
+
+  // Bulk-adds the checked/renamed detected-field candidates in one go,
+  // instead of the user manually picking + naming each one.
+  const addDetectedFields = (selected: { tag: string; selector: string; name: string }[]) => {
+    setDraftConfig(prev =>
+      prev.category === 'list'
+        ? {
+          ...prev,
+          fields: [
+            ...prev.fields,
+            ...selected.map(c => ({
+              id: crypto.randomUUID(),
+              name: c.name,
+              ref: { tag: c.tag, html: '', selector: c.selector },
+            })),
+          ],
+        }
+        : prev
+    )
+    setDetectedFields(null)
   }
 
   const confirmAddField = () => {
@@ -230,6 +277,8 @@ const SearchBar = () => {
     setDraftCategory('header')
     setDraftConfig(emptyConfigFor('header'))
     setPickTarget(null)
+    setDetectedFields(null)
+    setRepeatHint(null)
   }
 
   const deleteFunction = (id: string) => {
@@ -308,6 +357,9 @@ const SearchBar = () => {
         <FunctionBuilderPanel
           sourceUrl={url}
           groupMatchCount={groupMatchCount}
+          detectedFields={detectedFields}
+          onAddDetectedFields={addDetectedFields}
+          repeatHint={repeatHint}
           canRun={Boolean(siteValue)}
           onRun={runFunctions}
           extractionResult={extractionResult}

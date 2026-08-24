@@ -4,6 +4,7 @@ import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder
 import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder'
 import { generatePythonCode } from '../lib/codegen'
 import type { ExtractionResult } from '../lib/extract'
+import type { FieldCandidate } from '../lib/autoFields'
 
 const truncateHtml = (html: string, max = 50) =>
     html.length > max ? html.slice(0, max) + '…' : html
@@ -44,6 +45,58 @@ const ElementPreview = ({ el }: { el: ElementRef }) => (
     </div>
 )
 
+type DetectedEntry = FieldCandidate & { checked: boolean; name: string }
+
+// A bulk checklist for auto-suggested fields, offered right after picking a
+// list item — check/uncheck and rename before adding them all at once,
+// instead of manually picking each column/field one at a time. Keyed by its
+// candidate set at the call site so it gets a fresh internal state (all
+// checked, names reset to the suggestions) whenever a new item is picked.
+const DetectedFieldsPicker = ({
+    candidates,
+    onAdd,
+}: {
+    candidates: FieldCandidate[]
+    onAdd: (selected: { tag: string; selector: string; name: string }[]) => void
+}) => {
+    const [entries, setEntries] = useState<DetectedEntry[]>(
+        () => candidates.map(c => ({ ...c, checked: true, name: c.suggestedName }))
+    )
+
+    const toggle = (i: number) => setEntries(prev => prev.map((e, idx) => (idx === i ? { ...e, checked: !e.checked } : e)))
+    const rename = (i: number, name: string) => setEntries(prev => prev.map((e, idx) => (idx === i ? { ...e, name } : e)))
+    const selected = entries.filter(e => e.checked)
+
+    return (
+        <div className='flex flex-col gap-2 rounded-lg p-2.5 bg-white border border-[#c7cdc9] shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]'>
+            <p className='text-xs text-gray-500'>
+                Detected {entries.length} possible field{entries.length === 1 ? '' : 's'} — uncheck any you don't want, rename the rest:
+            </p>
+            <div className='flex flex-col gap-1.5 max-h-56 overflow-y-auto'>
+                {entries.map((e, i) => (
+                    <label key={i} className='flex items-center gap-2 text-xs'>
+                        <input type='checkbox' checked={e.checked} onChange={() => toggle(i)} className='accent-[#22a55e] shrink-0' />
+                        <span className='px-1 py-0.5 rounded bg-[#dcf3e4] text-[#166534] font-mono border border-[#b8e2c6] shrink-0'>{e.tag}</span>
+                        <input
+                            value={e.name}
+                            onChange={(ev) => rename(i, ev.target.value)}
+                            className='font-mono border border-[#c7cdc9] rounded px-1 py-0.5 w-24 shrink-0'
+                        />
+                        <span className='text-gray-400 truncate'>{e.preview}</span>
+                    </label>
+                ))}
+            </div>
+            <button
+                onClick={() => onAdd(selected.map(e => ({ tag: e.tag, selector: e.selector, name: e.name.trim() || e.suggestedName })))}
+                disabled={selected.length === 0}
+                className={`px-3 py-1.5 ${glossyGreenButtonClass}`}
+            >
+                Add selected ({selected.length})
+            </button>
+        </div>
+    )
+}
+
 const PickButton = ({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) => (
     <button
         onClick={onClick}
@@ -60,6 +113,9 @@ const PickButton = ({ label, active, onClick }: { label: string; active: boolean
 interface Props {
     sourceUrl: string
     groupMatchCount: number | null
+    detectedFields: FieldCandidate[] | null
+    onAddDetectedFields: (selected: { tag: string; selector: string; name: string }[]) => void
+    repeatHint: number | null
     draftName: string
     setDraftName: (v: string) => void
     draftCategory: FnCategory
@@ -88,6 +144,7 @@ interface Props {
 const FunctionBuilderPanel = ({
     sourceUrl,
     groupMatchCount,
+    detectedFields, onAddDetectedFields, repeatHint,
     draftName, setDraftName,
     draftCategory, onCategoryChange,
     draftConfig, setDraftConfig,
@@ -178,6 +235,13 @@ const FunctionBuilderPanel = ({
                         />
                     </div>
                     {mainTargetOf(draftConfig) && <ElementPreview el={mainTargetOf(draftConfig)!} />}
+                    {draftConfig.category !== 'list' && repeatHint !== null && (
+                        <div className='text-xs text-amber-600'>
+                            ⚠ this element repeats {repeatHint} times on the page — its text will all get
+                            concatenated into one blob. Switch Type to "List" to extract each one as
+                            structured fields instead.
+                        </div>
+                    )}
                     {draftConfig.category === 'list' && draftConfig.item && groupMatchCount !== null && (
                         <div className={`text-xs font-mono ${groupMatchCount > 1 ? 'text-[#166534]' : 'text-amber-600'}`}>
                             {groupMatchCount > 1
@@ -240,6 +304,13 @@ const FunctionBuilderPanel = ({
                 {draftConfig.category === 'list' && (
                     <div className='flex flex-col gap-1'>
                         <label className='text-xs text-gray-500'>Fields inside each item</label>
+                        {detectedFields && detectedFields.length > 0 && (
+                            <DetectedFieldsPicker
+                                key={detectedFields.map(f => f.selector).join('|')}
+                                candidates={detectedFields}
+                                onAdd={onAddDetectedFields}
+                            />
+                        )}
                         {draftConfig.fields.map(f => (
                             <div key={f.id} className='flex items-center gap-2 text-xs bg-white border border-[#c7cdc9] rounded-lg px-2 py-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]'>
                                 <span className='font-semibold'>{f.name}</span>
