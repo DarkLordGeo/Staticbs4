@@ -1,5 +1,6 @@
 {
   "name": "visualbs4scraper",
+  "description": "Pick elements on a live-rendered page and get back a working requests + BeautifulSoup Python script.",
   "private": true,
   "version": "0.0.0",
   "type": "module",
