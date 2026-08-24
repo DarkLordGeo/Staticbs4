@@ -43,6 +43,18 @@ curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 .venv/bin/pip install -r requirements.txt
 ```
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Covers `PageBundler.rewrite_css_urls` (relative/quoted URLs, data URIs and
+`#fragment`s left alone, resolution against the CSS file's own path) and the
+two routes' input validation — no real network calls, so it's fast and
+deterministic.
+
 ## Run with Docker
 
 ```bash
