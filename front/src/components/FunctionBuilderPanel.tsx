@@ -79,6 +79,7 @@ interface Props {
     onCreate: () => void
     functions: FnGroup[]
     onDeleteFunction: (id: string) => void
+    onClearAll: () => void
     canRun: boolean
     onRun: () => void
     extractionResult: Record<string, ExtractionResult> | null
@@ -93,7 +94,7 @@ const FunctionBuilderPanel = ({
     pickTarget, onStartPickMain, onStartPickField,
     naming, nameInput, setNameInput, onConfirmField, onCancelNaming, onRemoveField,
     canCreate, onCreate,
-    functions, onDeleteFunction,
+    functions, onDeleteFunction, onClearAll,
     canRun, onRun, extractionResult,
 }: Props) => {
     const code = useMemo(() => generatePythonCode(functions, sourceUrl), [functions, sourceUrl])
@@ -107,6 +108,23 @@ const FunctionBuilderPanel = ({
         } catch {
             // clipboard API unavailable/blocked (e.g. insecure context) — nothing to recover to
         }
+    }
+
+    const handleDownload = () => {
+        const filename = (() => {
+            try {
+                const host = new URL(sourceUrl).hostname.replace(/[^a-zA-Z0-9]+/g, '_')
+                return `${host || 'scraper'}.py`
+            } catch {
+                return 'scraper.py'
+            }
+        })()
+        const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(blobUrl)
     }
 
     return (
@@ -267,7 +285,10 @@ const FunctionBuilderPanel = ({
 
             {functions.length > 0 && (
                 <div className='mt-4 flex flex-col gap-2'>
-                    <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Functions</div>
+                    <div className='flex items-center justify-between'>
+                        <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Functions</div>
+                        <button onClick={onClearAll} className='text-xs text-gray-400 hover:text-red-500'>Clear all</button>
+                    </div>
                     {functions.map(fn => (
                         <div
                             key={fn.id}
@@ -341,17 +362,30 @@ const FunctionBuilderPanel = ({
                 <div className='mt-4 flex flex-col gap-2'>
                     <div className='flex items-center justify-between'>
                         <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Generated Python</div>
-                        <button
-                            onClick={handleCopy}
-                            className='
-                                text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
-                                shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
-                                bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
-                                border-[#b9c0ba] text-gray-700 hover:brightness-105
-                            '
-                        >
-                            {copied ? 'Copied!' : 'Copy'}
-                        </button>
+                        <div className='flex items-center gap-2'>
+                            <button
+                                onClick={handleDownload}
+                                className='
+                                    text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
+                                    shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
+                                    bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
+                                    border-[#b9c0ba] text-gray-700 hover:brightness-105
+                                '
+                            >
+                                Download
+                            </button>
+                            <button
+                                onClick={handleCopy}
+                                className='
+                                    text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
+                                    shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
+                                    bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
+                                    border-[#b9c0ba] text-gray-700 hover:brightness-105
+                                '
+                            >
+                                {copied ? 'Copied!' : 'Copy'}
+                            </button>
+                        </div>
                     </div>
                     <pre
                         className='

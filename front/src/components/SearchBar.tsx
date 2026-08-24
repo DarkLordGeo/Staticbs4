@@ -5,6 +5,7 @@ import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder
 import { emptyConfigFor, isConfigComplete } from '../types/builder'
 import { absoluteSelector, fieldSelectorFor, groupSelector, nearestRepeatingElement } from '../lib/selector'
 import { runExtraction, type ExtractionResult } from '../lib/extract'
+import { loadWorkspace, saveWorkspace } from '../lib/persistence'
 
 // Applied to every element matched by a 'list' function's item selector, so
 // picking one row visibly highlights the *whole group* it generalized to —
@@ -21,14 +22,17 @@ const GROUP_HIGHLIGHT_STYLE = `
 
 const SearchBar = () => {
 
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(() => loadWorkspace()?.url ?? "");
   const [siteValue, setSiteValue] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // ---- function builder state ----
-  const [functions, setFunctions] = useState<FnGroup[]>([])
+  const [functions, setFunctions] = useState<FnGroup[]>(() => loadWorkspace()?.functions ?? [])
+  // Autosave on every change — restored on next visit via the lazy
+  // initializers above. Excludes siteValue; see lib/persistence.ts.
+  useEffect(() => { saveWorkspace({ url, functions }) }, [url, functions])
   const [draftName, setDraftName] = useState("")
   const [draftCategory, setDraftCategory] = useState<FnCategory>('header')
   const [draftConfig, setDraftConfig] = useState<FnConfig>(emptyConfigFor('header'))
@@ -232,6 +236,10 @@ const SearchBar = () => {
     setFunctions(prev => prev.filter(fn => fn.id !== id))
   }
 
+  // Just empties functions — the autosave effect above persists that change
+  // right away, so there's no separate localStorage-clearing step needed.
+  const clearAllFunctions = () => setFunctions([])
+
   const canCreate = draftName.trim().length > 0 && isConfigComplete(draftConfig)
 
   return (
@@ -322,6 +330,7 @@ const SearchBar = () => {
           onCreate={createFunction}
           functions={functions}
           onDeleteFunction={deleteFunction}
+          onClearAll={clearAllFunctions}
         />
       </div>
     </div>
