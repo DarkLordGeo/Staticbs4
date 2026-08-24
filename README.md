@@ -6,6 +6,12 @@ Python script — no manual selector hunting.
 
 Docs site: https://darklordgeo.github.io/Staticbs4/
 
+|  |  |
+|---|---|
+| ![Landing page](docs/screenshots/landing.png) | ![Picking an element and getting Python back](docs/screenshots/workspace-basic.png) |
+
+![Picking one row of a jobs table selects and highlights the whole matching group](docs/screenshots/workspace-group-select.png)
+
 ## How it works
 
 1. **Paste a URL.** The backend fetches the page, strips scripts, and rewrites its
@@ -27,37 +33,61 @@ backend/   Flask + BeautifulSoup — fetches/bundles pages for the preview, prox
 Each has its own README with setup, scripts, and a Dockerfile:
 [`front/README.md`](front/README.md) · [`backend/README.md`](backend/README.md)
 
-## Quickstart
+## Running it
+
+Both the backend and frontend run either locally or in Docker — pick one option per
+side, mix and match if you like. Either way they reach each other the same way, via
+`127.0.0.1`, so nothing else needs to change.
+
+### Backend
+
+**Option A — locally:**
 
 ```bash
-# backend
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python Controller/app.py
+```
 
-# frontend (in another terminal)
+**Option B — Docker:**
+
+```bash
+cd backend
+docker build -t visualbs4scraper-backend .
+docker run --rm -p 5000:5000 visualbs4scraper-backend
+```
+
+Either way, it's serving at `http://127.0.0.1:5000`.
+
+### Frontend
+
+**Option A — locally (dev server, hot reload):**
+
+```bash
 cd front
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. The frontend expects the backend at
-`http://127.0.0.1:5000` (see the backend README's "Known limitations" section — this is
-a local-dev tool, not hardened for public deployment).
+Open `http://localhost:5173`.
 
-### With Docker
-
-Each side has its own image; run both and they'll reach each other the same way as the
-non-Docker setup, via `127.0.0.1`:
+**Option B — Docker (production build, served by nginx):**
 
 ```bash
-cd backend && docker build -t visualbs4scraper-backend .  && docker run --rm -p 5000:5000 visualbs4scraper-backend
-cd front   && docker build -t visualbs4scraper-frontend . && docker run --rm -p 8080:80   visualbs4scraper-frontend
+cd front
+docker build -t visualbs4scraper-frontend .
+docker run --rm -p 8080:80 visualbs4scraper-frontend
 ```
 
-Then open `http://localhost:8080`.
+Open `http://localhost:8080`.
+
+Whichever combination you pick, the frontend expects the backend at
+`http://127.0.0.1:5000` (see the backend README's "Known limitations" section — this is
+a local-dev tool, not hardened for public deployment). See
+[`front/README.md`](front/README.md) and [`backend/README.md`](backend/README.md) for
+more detail on each.
 
 ## Why `html5lib`
 
