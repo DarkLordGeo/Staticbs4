@@ -4,6 +4,13 @@
 
 import type { FnConfig, FnGroup } from '../types/builder'
 
+// Which extra output formats to write alongside the printed results —
+// both default off so existing generated code (and its tests) is unchanged.
+export interface ExportOptions {
+    json?: boolean
+    xlsx?: boolean
+}
+
 const pyStr = (s: string): string => JSON.stringify(s)
 
 // A valid, readable Python identifier from a free-text function name.
@@ -142,45 +149,97 @@ const genFunction = (name: string, config: FnConfig): string => {
     }
 }
 
-const genPreamble = (sourceUrl: string, needsUrljoin: boolean): string => [
-    '# pip install requests beautifulsoup4 html5lib',
-    'import requests',
-    needsUrljoin ? 'from urllib.parse import urljoin' : null,
-    'from bs4 import BeautifulSoup',
-    '',
-    `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
-    '',
-    '',
-    'def fetch_soup(url=URL):',
-    '    response = requests.get(url, timeout=10)',
-    '    response.raise_for_status()',
-    '    # html5lib (not html.parser) parses the way a browser renders —',
-    '    # e.g. it inserts the <tbody> browsers always add to tables, which',
-    '    # selectors picked from the live preview rely on.',
-    '    #',
-    '    # response.content (raw bytes), not response.text: a server that sends',
-    '    # Content-Type: text/html with no charset makes requests guess',
-    '    # ISO-8859-1 even when the body is actually UTF-8, silently mangling',
-    '    # non-ASCII text. Raw bytes let BeautifulSoup detect the real encoding.',
-    '    return BeautifulSoup(response.content, "html5lib")',
-].filter((l): l is string => l !== null).join('\n')
+const genPreamble = (sourceUrl: string, needsUrljoin: boolean, exportOptions: ExportOptions): string => {
+    const pipPackages = ['requests', 'beautifulsoup4', 'html5lib', ...(exportOptions.xlsx ? ['openpyxl'] : [])]
+    return [
+        `# pip install ${pipPackages.join(' ')}`,
+        'import requests',
+        exportOptions.json ? 'import json' : null,
+        needsUrljoin ? 'from urllib.parse import urljoin' : null,
+        'from bs4 import BeautifulSoup',
+        exportOptions.xlsx ? 'from openpyxl import Workbook' : null,
+        '',
+        `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
+        '',
+        '',
+        'def fetch_soup(url=URL):',
+        '    response = requests.get(url, timeout=10)',
+        '    response.raise_for_status()',
+        '    # html5lib (not html.parser) parses the way a browser renders —',
+        '    # e.g. it inserts the <tbody> browsers always add to tables, which',
+        '    # selectors picked from the live preview rely on.',
+        '    #',
+        '    # response.content (raw bytes), not response.text: a server that sends',
+        '    # Content-Type: text/html with no charset makes requests guess',
+        '    # ISO-8859-1 even when the body is actually UTF-8, silently mangling',
+        '    # non-ASCII text. Raw bytes let BeautifulSoup detect the real encoding.',
+        '    return BeautifulSoup(response.content, "html5lib")',
+    ].filter((l): l is string => l !== null).join('\n')
+}
 
-const genSimpleMain = (functions: FnGroup[], names: Map<string, string>): string => [
-    'if __name__ == "__main__":',
-    '    soup = fetch_soup()',
+// Shared by both single-page and crawl mains: given a `results` dict already
+// in scope, optionally write it out as JSON and/or one XLSX sheet per key.
+// Indented by the caller to whatever level `results` lives at.
+const genExportEpilogue = (exportOptions: ExportOptions): string[] => {
+    const lines: string[] = []
+    if (exportOptions.json) {
+        lines.push(
+            '',
+            'with open("results.json", "w", encoding="utf-8") as f:',
+            '    json.dump(results, f, indent=2, ensure_ascii=False)',
+            'print("Wrote results.json")',
+        )
+    }
+    if (exportOptions.xlsx) {
+        lines.push(
+            '',
+            'workbook = Workbook()',
+            'workbook.remove(workbook.active)',
+            'for name, value in results.items():',
+            '    sheet = workbook.create_sheet(title=name[:31])  # Excel sheet names cap at 31 chars',
+            '    if isinstance(value, list) and value and isinstance(value[0], dict):',
+            '        headers = list(value[0].keys())',
+            '        sheet.append(headers)',
+            '        for row in value:',
+            '            sheet.append([row.get(h) for h in headers])',
+            '    elif isinstance(value, list):',
+            '        sheet.append(["value"])',
+            '        for row in value:',
+            '            sheet.append([row])',
+            '    else:',
+            '        sheet.append(["value"])',
+            '        sheet.append([value])',
+            'workbook.save("results.xlsx")',
+            'print("Wrote results.xlsx")',
+        )
+    }
+    return lines
+}
+
+const genSimpleMain = (functions: FnGroup[], names: Map<string, string>, exportOptions: ExportOptions): string => {
     // A standalone (no List paired) url_pattern pagination function has no
     // def to call — genFunction emitted a comment for it instead of a def.
-    ...functions
-        .filter(fn => !(fn.config.category === 'pagination' && fn.config.mode === 'url_pattern'))
-        .map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
-].join('\n')
+    const printable = functions.filter(fn => !(fn.config.category === 'pagination' && fn.config.mode === 'url_pattern'))
+    return [
+        'if __name__ == "__main__":',
+        '    soup = fetch_soup()',
+        '    results = {',
+        ...indent(printable.map(fn => `${pyStr(names.get(fn.id)!)}: ${names.get(fn.id)}(soup),`), 2),
+        '    }',
+        '    for name, value in results.items():',
+        '        print(f"{name}:", value)',
+        ...indent(genExportEpilogue(exportOptions)),
+    ].join('\n')
+}
 
 // When a 'list' function is paired with a 'pagination' function, generate an
 // actual multi-page crawl instead of just extracting from one page — run
 // every list function on each page visited and accumulate. Any other
 // (non-list, non-pagination) functions still only make sense against a
 // single page, so they're left running once against the first one.
-const genCrawlMain = (functions: FnGroup[], names: Map<string, string>, paginationFn: FnGroup, listFns: FnGroup[]): string => {
+const genCrawlMain = (
+    functions: FnGroup[], names: Map<string, string>, paginationFn: FnGroup, listFns: FnGroup[], exportOptions: ExportOptions,
+): string => {
     const config = paginationFn.config
     if (config.category !== 'pagination') throw new Error('unreachable') // narrows the type below
     const otherFns = functions.filter(fn => fn.config.category !== 'list' && fn.id !== paginationFn.id)
@@ -231,26 +290,31 @@ const genCrawlMain = (functions: FnGroup[], names: Map<string, string>, paginati
 
     const main = [
         'if __name__ == "__main__":',
-        '    data = crawl()',
-        '    for name, items in data.items():',
-        '        print(f"{name}: {len(items)} items")',
+        '    results = crawl()',
         ...(otherFns.length > 0
             ? [
                 '',
                 '    soup = fetch_soup()  # single-page functions below run once, against the first page',
-                ...otherFns.map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
+                ...otherFns.map(fn => `    results[${pyStr(names.get(fn.id)!)}] = ${names.get(fn.id)}(soup)`),
+                '',
             ]
             : []),
+        '    for name, value in results.items():',
+        '        if isinstance(value, list):',
+        '            print(f"{name}: {len(value)} items")',
+        '        else:',
+        '            print(f"{name}:", value)',
+        ...indent(genExportEpilogue(exportOptions)),
     ].join('\n')
 
     return [listFunctionsBlock, crawlDef, main].join('\n\n\n')
 }
 
-export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): string => {
+export const generatePythonCode = (functions: FnGroup[], sourceUrl: string, exportOptions: ExportOptions = {}): string => {
     const names = uniqueNames(functions)
 
     if (functions.length === 0) {
-        return genPreamble(sourceUrl, false) + '\n\n\n# No functions defined yet — pick some elements to generate extraction code.\n'
+        return genPreamble(sourceUrl, false, {}) + '\n\n\n# No functions defined yet — pick some elements to generate extraction code.\n'
     }
 
     const paginationFn = functions.find(fn => fn.config.category === 'pagination')
@@ -261,7 +325,7 @@ export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): str
     // resolves a possibly-relative href against the current page's URL.
     const needsUrljoin = crawlMode && !isUrlPatternMode
 
-    const preamble = genPreamble(sourceUrl, needsUrljoin)
+    const preamble = genPreamble(sourceUrl, needsUrljoin, exportOptions)
     // In crawl mode, a url_pattern pagination function has no def of its own
     // (see genFunction) — its template/range go straight into crawl().
     const bodyFns = crawlMode && isUrlPatternMode
@@ -269,8 +333,8 @@ export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): str
         : functions
     const body = bodyFns.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
     const main = crawlMode
-        ? genCrawlMain(functions, names, paginationFn, listFns)
-        : genSimpleMain(functions, names)
+        ? genCrawlMain(functions, names, paginationFn, listFns, exportOptions)
+        : genSimpleMain(functions, names, exportOptions)
 
     return [preamble, body, main].join('\n\n\n') + '\n'
 }

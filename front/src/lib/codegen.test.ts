@@ -74,7 +74,7 @@ describe('generatePythonCode', () => {
         ]
         const code = generatePythonCode(functions, 'https://example.com')
         expect(code).not.toContain('def crawl(')
-        expect(code).toContain('print("get_next:"')
+        expect(code).toContain('"get_next": get_next(soup),')
     })
 
     it('falls back to a placeholder URL when none was provided', () => {
@@ -112,5 +112,44 @@ describe('generatePythonCode', () => {
         expect(code).not.toContain('def crawl(')
         expect(code).not.toContain('def paginate(')
         expect(code).toContain('add a List function')
+    })
+
+    it('adds no JSON/XLSX code when export options are omitted', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const code = generatePythonCode(functions, 'https://example.com')
+        expect(code).not.toContain('import json')
+        expect(code).not.toContain('openpyxl')
+        expect(code).not.toContain('results.json')
+        expect(code).not.toContain('results.xlsx')
+    })
+
+    it('writes results.json in single-page mode when json export is enabled', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const code = generatePythonCode(functions, 'https://example.com', { json: true })
+        expect(code).toContain('import json')
+        expect(code).toContain('results = {')
+        expect(code).toContain('"get_title": get_title(soup),')
+        expect(code).toContain('json.dump(results, f, indent=2, ensure_ascii=False)')
+        expect(code).not.toContain('openpyxl')
+    })
+
+    it('writes results.xlsx via openpyxl when xlsx export is enabled, and updates the pip install line', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const code = generatePythonCode(functions, 'https://example.com', { xlsx: true })
+        expect(code).toContain('# pip install requests beautifulsoup4 html5lib openpyxl')
+        expect(code).toContain('from openpyxl import Workbook')
+        expect(code).toContain('workbook.save("results.xlsx")')
+        expect(code).not.toContain('import json')
+    })
+
+    it('supports both export formats together in crawl mode, keyed by the results dict', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            { id: '2', name: 'get_next', config: { category: 'pagination', mode: 'link', next: ref('#next', 'a') } },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { json: true, xlsx: true })
+        expect(code).toContain('results = crawl()')
+        expect(code).toContain('json.dump(results, f, indent=2, ensure_ascii=False)')
+        expect(code).toContain('workbook.save("results.xlsx")')
     })
 })

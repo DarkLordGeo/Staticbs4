@@ -171,7 +171,10 @@ const FunctionBuilderPanel = ({
     functions, onDeleteFunction, onClearAll,
     canRun, onRun, extractionResult,
 }: Props) => {
-    const code = useMemo(() => generatePythonCode(functions, sourceUrl), [functions, sourceUrl])
+    const [exportJson, setExportJson] = useState(false)
+    const [exportXlsx, setExportXlsx] = useState(false)
+    const exportOptions = useMemo(() => ({ json: exportJson, xlsx: exportXlsx }), [exportJson, exportXlsx])
+    const code = useMemo(() => generatePythonCode(functions, sourceUrl, exportOptions), [functions, sourceUrl, exportOptions])
     const [copied, setCopied] = useState(false)
 
     const handleCopy = async () => {
@@ -534,7 +537,25 @@ const FunctionBuilderPanel = ({
                 <div className='mt-4 flex flex-col gap-2'>
                     <div className='flex items-center justify-between'>
                         <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Generated Python</div>
-                        <div className='flex items-center gap-2'>
+                        <div className='flex items-center gap-3'>
+                            <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
+                                <input
+                                    type='checkbox'
+                                    checked={exportJson}
+                                    onChange={e => setExportJson(e.target.checked)}
+                                    className='accent-[#2b6b3f]'
+                                />
+                                Also write JSON
+                            </label>
+                            <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
+                                <input
+                                    type='checkbox'
+                                    checked={exportXlsx}
+                                    onChange={e => setExportXlsx(e.target.checked)}
+                                    className='accent-[#2b6b3f]'
+                                />
+                                Also write XLSX
+                            </label>
                             <button
                                 onClick={handleDownload}
                                 className='
