@@ -4,6 +4,7 @@ import FunctionBuilderPanel from './FunctionBuilderPanel'
 import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder'
 import { emptyConfigFor, isConfigComplete } from '../types/builder'
 import { absoluteSelector, fieldSelectorFor, groupSelector, nearestRepeatingElement } from '../lib/selector'
+import { runExtraction, type ExtractionResult } from '../lib/extract'
 
 // Applied to every element matched by a 'list' function's item selector, so
 // picking one row visibly highlights the *whole group* it generalized to —
@@ -84,6 +85,24 @@ const SearchBar = () => {
     matches.forEach(el => el.classList.add(GROUP_HIGHLIGHT_CLASS))
     setGroupMatchCount(matches.length)
   }, [draftConfig, siteValue])
+
+  // Results of the last "Run" click — null until run, re-cleared whenever a
+  // new page is fetched (old results referencing the old page are useless).
+  // Reset-on-prop-change during render, not an effect: React's own
+  // recommended pattern for this — an effect here would mean an extra
+  // wasted render of the stale results before the reset takes effect.
+  const [extractionResult, setExtractionResult] = useState<Record<string, ExtractionResult> | null>(null)
+  const [extractionSiteValue, setExtractionSiteValue] = useState(siteValue)
+  if (siteValue !== extractionSiteValue) {
+    setExtractionSiteValue(siteValue)
+    setExtractionResult(null)
+  }
+
+  const runFunctions = () => {
+    const doc = iframeRef.current?.contentDocument
+    if (!doc) return
+    setExtractionResult(runExtraction(doc, functions))
+  }
 
   const getWebsiteContent = async () => {
     setLoading(true);
@@ -281,6 +300,9 @@ const SearchBar = () => {
         <FunctionBuilderPanel
           sourceUrl={url}
           groupMatchCount={groupMatchCount}
+          canRun={Boolean(siteValue)}
+          onRun={runFunctions}
+          extractionResult={extractionResult}
           draftName={draftName}
           setDraftName={setDraftName}
           draftCategory={draftCategory}

@@ -3,9 +3,20 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder'
 import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder'
 import { generatePythonCode } from '../lib/codegen'
+import type { ExtractionResult } from '../lib/extract'
 
 const truncateHtml = (html: string, max = 50) =>
     html.length > max ? html.slice(0, max) + '…' : html
+
+// Pretty-print a result value, capping long lists so one big scrape doesn't
+// blow up the panel — this is a sanity check, not a full data browser.
+const formatResult = (value: unknown, max = 5): string => {
+    if (value === null) return '(no match)'
+    if (Array.isArray(value) && value.length > max) {
+        return JSON.stringify(value.slice(0, max), null, 2) + `\n… and ${value.length - max} more`
+    }
+    return JSON.stringify(value, null, 2)
+}
 
 const inputClass = `
     border border-[#c7cdc9] rounded-lg px-2 py-1 text-sm bg-white
@@ -68,6 +79,9 @@ interface Props {
     onCreate: () => void
     functions: FnGroup[]
     onDeleteFunction: (id: string) => void
+    canRun: boolean
+    onRun: () => void
+    extractionResult: Record<string, ExtractionResult> | null
 }
 
 const FunctionBuilderPanel = ({
@@ -80,6 +94,7 @@ const FunctionBuilderPanel = ({
     naming, nameInput, setNameInput, onConfirmField, onCancelNaming, onRemoveField,
     canCreate, onCreate,
     functions, onDeleteFunction,
+    canRun, onRun, extractionResult,
 }: Props) => {
     const code = useMemo(() => generatePythonCode(functions, sourceUrl), [functions, sourceUrl])
     const [copied, setCopied] = useState(false)
@@ -271,6 +286,54 @@ const FunctionBuilderPanel = ({
                             <div className='text-xs text-gray-500 mt-1'>{summarizeFn(fn)}</div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {functions.length > 0 && (
+                <div className='mt-4 flex flex-col gap-2'>
+                    <div className='flex items-center justify-between'>
+                        <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Test Extraction</div>
+                        <button
+                            onClick={onRun}
+                            disabled={!canRun}
+                            className={`px-3 py-1.5 ${glossyGreenButtonClass}`}
+                        >
+                            Run
+                        </button>
+                    </div>
+                    {!extractionResult && (
+                        <p className='text-xs text-gray-400'>
+                            {canRun ? 'Run to see what each function actually extracts from the live preview.' : 'Fetch a page first.'}
+                        </p>
+                    )}
+                    {extractionResult && (
+                        <div className='flex flex-col gap-2 max-h-72 overflow-y-auto'>
+                            {functions.map(fn => {
+                                const result = extractionResult[fn.name]
+                                if (!result) return null
+                                return (
+                                    <div
+                                        key={fn.id}
+                                        className='
+                                            rounded-lg p-2.5 bg-white
+                                            border border-[#c7cdc9]
+                                            shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]
+                                        '
+                                    >
+                                        <div className='flex items-center gap-2'>
+                                            <span className='font-mono font-semibold text-xs'>{fn.name}()</span>
+                                            {!result.ok && <span className='text-xs text-red-600'>error</span>}
+                                        </div>
+                                        {result.ok ? (
+                                            <pre className='mt-1 font-mono text-[11px] text-gray-600 whitespace-pre-wrap wrap-break-word'>{formatResult(result.value)}</pre>
+                                        ) : (
+                                            <p className='mt-1 text-xs text-red-600'>{result.error}</p>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
