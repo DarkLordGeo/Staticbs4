@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VisualBs4Scraper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --surface: #eef2ef;
+    --surface-2: #dde4de;
+    --chassis-1: #e4e6e9;
+    --chassis-2: #c7cad0;
+    --chassis-3: #aeb2b9;
+    --chassis-4: #cfd2d7;
+    --chassis-border: #8f939b;
+    --ink: #3a3d42;
+    --ink-soft: #54575e;
+    --ink-faint: #6b6f77;
+    --green-1: #4ade80;
+    --green-2: #22a55e;
+    --green-3: #15803d;
+    --green-border: #14532d;
+    --terminal-bg-1: #1e2b23;
+    --terminal-bg-2: #0f1811;
+    --terminal-border: #1f3a28;
+    --terminal-text: #9be8ab;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+    font-family: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+    color: var(--ink);
+  }
+
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  .badge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 35% 30%, #8be8ab, #2f9e5c 60%, #14532d 100%);
+    box-shadow: 0 0 3px 1px rgba(74, 222, 128, 0.6);
+    display: inline-block;
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 20px;
+  }
+
+  h1 {
+    font-weight: 800;
+    font-size: clamp(36px, 6vw, 56px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    margin: 0 0 20px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7), 0 -1px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .lede {
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 640px;
+    margin: 0 0 36px;
+  }
+
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 64px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 26px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: filter 0.15s ease, transform 0.1s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+
+  .btn-primary {
+    color: white;
+    background: linear-gradient(180deg, var(--green-1) 0%, var(--green-2) 50%, var(--green-3) 51%, var(--green-2) 100%);
+    border-color: var(--green-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.35), 0 3px 6px rgba(0, 0, 0, 0.3);
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+
+  .btn-secondary {
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--chassis-1) 0%, var(--chassis-2) 45%, var(--chassis-3) 46%, var(--chassis-4) 100%);
+    border-color: var(--chassis-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -3px 6px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  .btn-secondary:hover { filter: brightness(1.03); }
+
+  section { margin-bottom: 56px; }
+
+  h2 {
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 20px;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .step {
+    background: linear-gradient(180deg, #f7f9f7 0%, #eaeeeb 100%);
+    border: 1px solid #c3c9c4;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .step-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #166534;
+    background: #dcf3e4;
+    border: 1px solid #b8e2c6;
+    border-radius: 999px;
+    padding: 2px 9px;
+    display: inline-block;
+    margin-bottom: 12px;
+  }
+
+  .step h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .step p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+
+  .terminal {
+    background: linear-gradient(180deg, var(--terminal-bg-1) 0%, var(--terminal-bg-2) 100%);
+    border: 1px solid var(--terminal-border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.1);
+    overflow-x: auto;
+  }
+
+  .terminal .label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--terminal-text);
+    margin-bottom: 10px;
+  }
+
+  .led {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #4ade80;
+    box-shadow: 0 0 4px 1px #4ade80;
+  }
+
+  pre {
+    margin: 0;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--terminal-text);
+    white-space: pre;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .panel {
+    background: linear-gradient(180deg, #eef1ef 0%, #dfe4e0 100%);
+    border: 1px solid #c3c9c4;
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 5px rgba(0, 0, 0, 0.06);
+  }
+
+  .panel h3 {
+    margin: 0 0 10px;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .panel p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  code.inline {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.9em;
+    background: rgba(0, 0, 0, 0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  footer {
+    border-top: 1px solid #c3c9c4;
+    padding-top: 24px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    text-align: center;
+  }
+
+  footer a {
+    color: var(--ink-faint);
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow"><span class="badge-dot"></span> VisualBs4Scraper</div>
+
+  <h1>Turn any static site<br />into a scraper</h1>
+  <p class="lede">
+    Paste a URL, pick the elements you care about right on the live page, and get back
+    working BeautifulSoup code — no manual selector hunting.
+  </p>
+
+  <div class="buttons">
+    <a class="btn btn-primary" href="https://github.com/DarkLordGeo/Staticbs4" target="_blank" rel="noopener">View on GitHub</a>
+    <a class="btn btn-secondary" href="#quickstart">Quickstart</a>
+    <a class="btn btn-secondary" href="https://github.com/DarkLordGeo/Staticbs4/tree/main/front" target="_blank" rel="noopener">Frontend docs</a>
+    <a class="btn btn-secondary" href="https://github.com/DarkLordGeo/Staticbs4/tree/main/backend" target="_blank" rel="noopener">Backend docs</a>
+  </div>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">01</span>
+        <h3>Paste a URL</h3>
+        <p>The backend fetches and bundles the page so it renders safely in a live preview, styling intact.</p>
+      </div>
+      <div class="step">
+        <span class="step-num">02</span>
+        <h3>Pick elements</h3>
+        <p>Click a header, a text block, a link list, a table, or one row of a repeating list — right on the rendered page.</p>
+      </div>
+      <div class="step">
+        <span class="step-num">03</span>
+        <h3>Get Python back</h3>
+        <p>A real, runnable <code class="inline">requests</code> + <code class="inline">BeautifulSoup</code> script, generated from what you picked.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="quickstart">
+    <h2>Quickstart</h2>
+    <div class="terminal">
+      <div class="label"><span class="led"></span> Terminal</div>
+      <pre># backend
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python Controller/app.py
+
+# frontend (in another terminal)
+cd front
+npm install
+npm run dev</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it's built on</h2>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Frontend</h3>
+        <p>React + TypeScript + Vite, styled with Tailwind. Click-to-pick element selection, a visual function builder, and a live BeautifulSoup code generator.</p>
+      </div>
+      <div class="panel">
+        <h3>Backend</h3>
+        <p>Flask + BeautifulSoup (html5lib). Fetches and bundles pages for the preview, proxies their assets, and keeps parsing consistent with what a browser renders.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/DarkLordGeo/Staticbs4" target="_blank" rel="noopener">github.com/DarkLordGeo/Staticbs4</a>
+  </footer>
+</main>
+</body>
+</html>
