@@ -54,7 +54,11 @@ def bundle_page(url: str) -> str:
     response = requests.get(url, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    # html5lib, not html.parser: it performs real HTML5 tree construction
+    # (implicit <tbody> in tables, etc.), matching what the frontend's
+    # iframe preview actually renders. The generated Python code parses with
+    # the same backend for the same reason — see front/src/lib/codegen.ts.
+    soup = BeautifulSoup(response.text, "html5lib")
 
     base_tag = soup.find("base", href=True)
     base_url = urljoin(url, base_tag["href"]) if base_tag else url

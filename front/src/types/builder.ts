@@ -1,10 +1,11 @@
 // Shared types for the visual bs4-function builder.
 //
-// v1 scope: this only models the *forms* — what a function is named, what
-// category it is, and what element(s)/options it's configured with. Nothing
-// here generates Python or runs against the live page yet.
+// Models the *forms* — what a function is named, what category it is, and
+// what element(s)/options it's configured with — plus enough of a CSS
+// selector on each picked element for `../lib/codegen.ts` to turn the whole
+// thing into real BeautifulSoup code.
 
-export type ElementRef = { tag: string; html: string }
+export type ElementRef = { tag: string; html: string; selector: string }
 
 export type FnCategory = 'header' | 'text' | 'links' | 'list' | 'table' | 'pagination'
 

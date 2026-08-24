@@ -1,0 +1,24 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging / distribution
+*.egg-info/
+build/
+dist/
+
+# Local env vars / secrets
+.env
+.env.*
+
+# Editor/OS cruft
+.DS_Store
+
+# Scratch output from backend/Helpers/WebsiteType.py and backend/test.py
+website.html
