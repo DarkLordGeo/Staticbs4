@@ -133,37 +133,96 @@ const genFunction = (name: string, config: FnConfig): string => {
     }
 }
 
-export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): string => {
-    const names = uniqueNames(functions)
+const genPreamble = (sourceUrl: string, needsUrljoin: boolean): string => [
+    '# pip install requests beautifulsoup4 html5lib',
+    'import requests',
+    needsUrljoin ? 'from urllib.parse import urljoin' : null,
+    'from bs4 import BeautifulSoup',
+    '',
+    `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
+    '',
+    '',
+    'def fetch_soup(url=URL):',
+    '    response = requests.get(url, timeout=10)',
+    '    response.raise_for_status()',
+    '    # html5lib (not html.parser) parses the way a browser renders —',
+    '    # e.g. it inserts the <tbody> browsers always add to tables, which',
+    '    # selectors picked from the live preview rely on.',
+    '    return BeautifulSoup(response.text, "html5lib")',
+].filter((l): l is string => l !== null).join('\n')
 
-    const preamble = [
-        '# pip install requests beautifulsoup4 html5lib',
-        'import requests',
-        'from bs4 import BeautifulSoup',
+const genSimpleMain = (functions: FnGroup[], names: Map<string, string>): string => [
+    'if __name__ == "__main__":',
+    '    soup = fetch_soup()',
+    ...functions.map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
+].join('\n')
+
+// When a 'list' function is paired with a 'pagination' function, generate an
+// actual multi-page crawl instead of just returning the next link's href
+// once — follow it, re-run every list function on each page, and accumulate.
+// Any other (non-list, non-pagination) functions still only make sense
+// against a single page, so they're left running once against the first one.
+const genCrawlMain = (functions: FnGroup[], names: Map<string, string>, paginationFn: FnGroup, listFns: FnGroup[]): string => {
+    const paginationName = names.get(paginationFn.id)!
+    const otherFns = functions.filter(fn => fn.config.category !== 'list' && fn.id !== paginationFn.id)
+
+    const crawl = [
+        'MAX_PAGES = 20',
         '',
-        `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
+        'LIST_FUNCTIONS = {',
+        ...listFns.map(fn => `    ${pyStr(names.get(fn.id)!)}: ${names.get(fn.id)},`),
+        '}',
         '',
         '',
-        'def fetch_soup(url=URL):',
-        '    response = requests.get(url, timeout=10)',
-        '    response.raise_for_status()',
-        '    # html5lib (not html.parser) parses the way a browser renders —',
-        '    # e.g. it inserts the <tbody> browsers always add to tables, which',
-        '    # selectors picked from the live preview rely on.',
-        '    return BeautifulSoup(response.text, "html5lib")',
+        'def crawl(start_url=URL, max_pages=MAX_PAGES):',
+        '    """Follow the picked "next page" link, running every list function',
+        '    on each page visited and accumulating their results."""',
+        '    url = start_url',
+        '    pages = 0',
+        '    results = {name: [] for name in LIST_FUNCTIONS}',
+        '    while url and pages < max_pages:',
+        '        soup = fetch_soup(url)',
+        '        for name, fn in LIST_FUNCTIONS.items():',
+        '            results[name].extend(fn(soup))',
+        `        next_href = ${paginationName}(soup)`,
+        '        url = urljoin(url, next_href) if next_href else None',
+        '        pages += 1',
+        '    return results',
     ].join('\n')
-
-    if (functions.length === 0) {
-        return preamble + '\n\n\n# No functions defined yet — pick some elements to generate extraction code.\n'
-    }
-
-    const body = functions.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
 
     const main = [
         'if __name__ == "__main__":',
-        '    soup = fetch_soup()',
-        ...functions.map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
+        '    data = crawl()',
+        '    for name, items in data.items():',
+        '        print(f"{name}: {len(items)} items")',
+        ...(otherFns.length > 0
+            ? [
+                '',
+                '    soup = fetch_soup()  # single-page functions below run once, against the first page',
+                ...otherFns.map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
+            ]
+            : []),
     ].join('\n')
+
+    return [crawl, main].join('\n\n\n')
+}
+
+export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): string => {
+    const names = uniqueNames(functions)
+
+    if (functions.length === 0) {
+        return genPreamble(sourceUrl, false) + '\n\n\n# No functions defined yet — pick some elements to generate extraction code.\n'
+    }
+
+    const paginationFn = functions.find(fn => fn.config.category === 'pagination')
+    const listFns = functions.filter(fn => fn.config.category === 'list')
+    const crawlMode = paginationFn !== undefined && listFns.length > 0
+
+    const preamble = genPreamble(sourceUrl, crawlMode)
+    const body = functions.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
+    const main = crawlMode
+        ? genCrawlMain(functions, names, paginationFn, listFns)
+        : genSimpleMain(functions, names)
 
     return [preamble, body, main].join('\n\n\n') + '\n'
 }
