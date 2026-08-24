@@ -153,10 +153,31 @@ const SearchBar = () => {
     const doc = iframeRef.current?.contentDocument
     if (!doc || !doc.body) return
 
-    // auto-size the iframe to the fetched page's real content height
-    if (iframeRef.current) {
-      iframeRef.current.style.height = `${doc.documentElement.scrollHeight}px`
+    // Auto-size the iframe to the fetched page's real content height. A
+    // single measurement right here isn't enough: proxied stylesheets can
+    // still be loading at this exact moment and grow the real layout well
+    // past what scrollHeight reports right now — observed live: a page
+    // that's actually ~3400px tall measured as 150px at this instant,
+    // clipping almost the entire preview invisibly. A ResizeObserver on
+    // documentElement, tried first, turned out *not* to reliably fire for
+    // this (scrollHeight/overflow growth isn't the same as a border-box
+    // resize, which is what ResizeObserver actually watches) — so instead,
+    // hook the actual known cause directly (each stylesheet's load/error),
+    // plus a couple of cheap fallback re-measurements for anything else
+    // (images, fonts) that doesn't have as clean a signal to hook.
+    const resizeToContent = () => {
+      if (iframeRef.current) {
+        iframeRef.current.style.height = `${doc.documentElement.scrollHeight}px`
+      }
     }
+    resizeToContent()
+    doc.head?.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+      link.addEventListener('load', resizeToContent)
+      link.addEventListener('error', resizeToContent) // don't stall forever on one bad stylesheet
+    })
+    doc.fonts?.ready.then(resizeToContent).catch(() => { /* font loading failed — nothing to resize for */ })
+    setTimeout(resizeToContent, 300)
+    setTimeout(resizeToContent, 1000)
 
     // Style hook for the group-highlight effect below (new document each
     // load, so this needs re-adding every time — nothing to clean up).
@@ -353,7 +374,14 @@ const SearchBar = () => {
           />
         </div>
       </div>
-      <div className='w-1/3 h-full flex items-start justify-start flex-col'>
+      {/*
+        The preview iframe auto-sizes to the fetched page's real height (see
+        handleIframeLoad) — for a real site that's often several screens
+        tall, which pushes this panel's controls out of view as you scroll
+        down to pick something further down the page. Sticky + its own
+        scroll keeps "Build a Function" reachable without scrolling back up.
+      */}
+      <div className='w-1/3 sticky top-4 max-h-screen overflow-y-auto flex items-start justify-start flex-col'>
         <FunctionBuilderPanel
           sourceUrl={url}
           groupMatchCount={groupMatchCount}
