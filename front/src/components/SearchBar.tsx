@@ -142,7 +142,11 @@ const SearchBar = () => {
         case 'links': return { ...prev, container: ref }
         case 'list': return { ...prev, item: ref }
         case 'table': return { ...prev, table: ref }
-        case 'pagination': return { ...prev, next: ref }
+        // url_pattern mode has no element to pick — nothing to do if we
+        // somehow get here while in it (shouldn't happen: the UI hides the
+        // pick button for that mode, but a stale pick session started
+        // before switching modes could otherwise still land here).
+        case 'pagination': return prev.mode === 'link' ? { ...prev, next: ref } : prev
       }
     })
   }

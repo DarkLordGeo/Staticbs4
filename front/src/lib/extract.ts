@@ -66,6 +66,12 @@ const extractOne = (doc: Document, config: FnConfig): unknown => {
         }
 
         case 'pagination': {
+            if (config.mode === 'url_pattern') {
+                if (!config.urlTemplate.includes('{page}')) throw new Error('URL template needs a {page} placeholder')
+                // Nothing on the current page to query — preview what page 2
+                // (or wherever this starts) would actually resolve to.
+                return config.urlTemplate.replace('{page}', String(config.startPage + 1))
+            }
             if (!config.next) throw new Error('no next-page element selected')
             const el = doc.querySelector(config.next.selector)
             return el ? el.getAttribute('href') : null

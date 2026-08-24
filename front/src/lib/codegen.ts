@@ -35,7 +35,7 @@ const selectorFor = (config: FnConfig): string | null => {
         case 'links': return config.container?.selector ?? null
         case 'list': return config.item?.selector ?? null
         case 'table': return config.table?.selector ?? null
-        case 'pagination': return config.next?.selector ?? null
+        case 'pagination': return config.mode === 'link' ? (config.next?.selector ?? null) : null
     }
 }
 
@@ -43,6 +43,13 @@ const indent = (lines: string[], level = 1): string[] =>
     lines.map(l => (l ? '    '.repeat(level) + l : l))
 
 const genFunction = (name: string, config: FnConfig): string => {
+    // Checked before the generic "no selector => incomplete" guard below:
+    // url_pattern pagination deliberately has no selector at all (it's not
+    // an unfinished pick, it's a different kind of function entirely).
+    if (config.category === 'pagination' && config.mode === 'url_pattern') {
+        return `# ${name}: URL-pattern pagination has nothing to extract on its own — add a List function to actually crawl pages ${config.startPage}-${config.endPage} of ${pyStr(config.urlTemplate)}.`
+    }
+
     const selector = selectorFor(config)
     if (!selector) {
         return [`def ${name}(soup):`, ...indent(['return None  # incomplete: no element selected'])].join('\n')
@@ -126,6 +133,8 @@ const genFunction = (name: string, config: FnConfig): string => {
         }
 
         case 'pagination':
+            // url_pattern mode is handled by the early-return above — only
+            // 'link' mode (a real element to select) reaches here.
             return [
                 `def ${name}(soup):`,
                 ...indent([`el = soup.select_one(${pyStr(selector)})`, `return el.get("href") if el else None`]),
@@ -159,41 +168,66 @@ const genPreamble = (sourceUrl: string, needsUrljoin: boolean): string => [
 const genSimpleMain = (functions: FnGroup[], names: Map<string, string>): string => [
     'if __name__ == "__main__":',
     '    soup = fetch_soup()',
-    ...functions.map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
+    // A standalone (no List paired) url_pattern pagination function has no
+    // def to call — genFunction emitted a comment for it instead of a def.
+    ...functions
+        .filter(fn => !(fn.config.category === 'pagination' && fn.config.mode === 'url_pattern'))
+        .map(fn => `    print(${pyStr(names.get(fn.id)! + ':')}, ${names.get(fn.id)}(soup))`),
 ].join('\n')
 
 // When a 'list' function is paired with a 'pagination' function, generate an
-// actual multi-page crawl instead of just returning the next link's href
-// once — follow it, re-run every list function on each page, and accumulate.
-// Any other (non-list, non-pagination) functions still only make sense
-// against a single page, so they're left running once against the first one.
+// actual multi-page crawl instead of just extracting from one page — run
+// every list function on each page visited and accumulate. Any other
+// (non-list, non-pagination) functions still only make sense against a
+// single page, so they're left running once against the first one.
 const genCrawlMain = (functions: FnGroup[], names: Map<string, string>, paginationFn: FnGroup, listFns: FnGroup[]): string => {
-    const paginationName = names.get(paginationFn.id)!
+    const config = paginationFn.config
+    if (config.category !== 'pagination') throw new Error('unreachable') // narrows the type below
     const otherFns = functions.filter(fn => fn.config.category !== 'list' && fn.id !== paginationFn.id)
 
-    const crawl = [
-        'MAX_PAGES = 20',
-        '',
+    const listFunctionsBlock = [
         'LIST_FUNCTIONS = {',
         ...listFns.map(fn => `    ${pyStr(names.get(fn.id)!)}: ${names.get(fn.id)},`),
         '}',
-        '',
-        '',
-        'def crawl(start_url=URL, max_pages=MAX_PAGES):',
-        '    """Follow the picked "next page" link, running every list function',
-        '    on each page visited and accumulating their results."""',
-        '    url = start_url',
-        '    pages = 0',
-        '    results = {name: [] for name in LIST_FUNCTIONS}',
-        '    while url and pages < max_pages:',
-        '        soup = fetch_soup(url)',
-        '        for name, fn in LIST_FUNCTIONS.items():',
-        '            results[name].extend(fn(soup))',
-        `        next_href = ${paginationName}(soup)`,
-        '        url = urljoin(url, next_href) if next_href else None',
-        '        pages += 1',
-        '    return results',
     ].join('\n')
+
+    const crawlDef = config.mode === 'url_pattern'
+        ? [
+            `URL_TEMPLATE = ${pyStr(config.urlTemplate)}`,
+            `START_PAGE = ${config.startPage}`,
+            `END_PAGE = ${config.endPage}`,
+            '',
+            '',
+            'def crawl():',
+            '    """Step through URL_TEMPLATE from START_PAGE to END_PAGE (inclusive),',
+            '    running every list function on each page and accumulating results."""',
+            '    results = {name: [] for name in LIST_FUNCTIONS}',
+            '    for page in range(START_PAGE, END_PAGE + 1):',
+            '        url = URL_TEMPLATE.format(page=page)',
+            '        soup = fetch_soup(url)',
+            '        for name, fn in LIST_FUNCTIONS.items():',
+            '            results[name].extend(fn(soup))',
+            '    return results',
+        ].join('\n')
+        : [
+            'MAX_PAGES = 20',
+            '',
+            '',
+            'def crawl(start_url=URL, max_pages=MAX_PAGES):',
+            '    """Follow the picked "next page" link, running every list function',
+            '    on each page visited and accumulating results."""',
+            '    url = start_url',
+            '    pages = 0',
+            '    results = {name: [] for name in LIST_FUNCTIONS}',
+            '    while url and pages < max_pages:',
+            '        soup = fetch_soup(url)',
+            '        for name, fn in LIST_FUNCTIONS.items():',
+            '            results[name].extend(fn(soup))',
+            `        next_href = ${names.get(paginationFn.id)!}(soup)`,
+            '        url = urljoin(url, next_href) if next_href else None',
+            '        pages += 1',
+            '    return results',
+        ].join('\n')
 
     const main = [
         'if __name__ == "__main__":',
@@ -209,7 +243,7 @@ const genCrawlMain = (functions: FnGroup[], names: Map<string, string>, paginati
             : []),
     ].join('\n')
 
-    return [crawl, main].join('\n\n\n')
+    return [listFunctionsBlock, crawlDef, main].join('\n\n\n')
 }
 
 export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): string => {
@@ -222,9 +256,18 @@ export const generatePythonCode = (functions: FnGroup[], sourceUrl: string): str
     const paginationFn = functions.find(fn => fn.config.category === 'pagination')
     const listFns = functions.filter(fn => fn.config.category === 'list')
     const crawlMode = paginationFn !== undefined && listFns.length > 0
+    const isUrlPatternMode = paginationFn?.config.category === 'pagination' && paginationFn.config.mode === 'url_pattern'
+    // url_pattern mode uses str.format(), not urljoin — only 'link' mode
+    // resolves a possibly-relative href against the current page's URL.
+    const needsUrljoin = crawlMode && !isUrlPatternMode
 
-    const preamble = genPreamble(sourceUrl, crawlMode)
-    const body = functions.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
+    const preamble = genPreamble(sourceUrl, needsUrljoin)
+    // In crawl mode, a url_pattern pagination function has no def of its own
+    // (see genFunction) — its template/range go straight into crawl().
+    const bodyFns = crawlMode && isUrlPatternMode
+        ? functions.filter(fn => fn.id !== paginationFn.id)
+        : functions
+    const body = bodyFns.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
     const main = crawlMode
         ? genCrawlMain(functions, names, paginationFn, listFns)
         : genSimpleMain(functions, names)

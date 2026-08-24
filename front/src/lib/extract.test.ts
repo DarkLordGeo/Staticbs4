@@ -70,7 +70,7 @@ describe('runExtraction', () => {
 
     it('extracts a pagination href', () => {
         setBody('<a id="next" href="/page/2">Next</a>')
-        const functions: FnGroup[] = [{ id: '1', name: 'get_next', config: { category: 'pagination', next: ref('#next', 'a') } }]
+        const functions: FnGroup[] = [{ id: '1', name: 'get_next', config: { category: 'pagination', mode: 'link', next: ref('#next', 'a') } }]
         expect(runExtraction(document, functions).get_next).toEqual({ ok: true, value: '/page/2' })
     })
 
@@ -84,5 +84,16 @@ describe('runExtraction', () => {
         setBody('<div></div>')
         const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
         expect(runExtraction(document, functions).get_title).toEqual({ ok: true, value: null })
+    })
+
+    it('previews the next resolved URL for url_pattern pagination', () => {
+        const functions: FnGroup[] = [{
+            id: '1', name: 'paginate',
+            config: { category: 'pagination', mode: 'url_pattern', urlTemplate: 'https://example.com/page-{page}.html', startPage: 1, endPage: 5 },
+        }]
+        expect(runExtraction(document, functions).paginate).toEqual({
+            ok: true,
+            value: 'https://example.com/page-2.html',
+        })
     })
 })

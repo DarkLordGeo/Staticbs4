@@ -5,6 +5,7 @@ import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder
 import { generatePythonCode } from '../lib/codegen'
 import type { ExtractionResult } from '../lib/extract'
 import type { FieldCandidate } from '../lib/autoFields'
+import { suggestUrlTemplate } from '../lib/urlPattern'
 
 const truncateHtml = (html: string, max = 50) =>
     html.length > max ? html.slice(0, max) + '…' : html
@@ -107,6 +108,22 @@ const PickButton = ({ label, active, onClick }: { label: string; active: boolean
                 : 'bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)] border-[#b9c0ba] text-gray-700 hover:brightness-105'}`}
     >
         {active ? 'Click an element…' : label}
+    </button>
+)
+
+// A persistent choice between two strategies, not a momentary "now click an
+// element" action — green when selected (the app's usual "active" color),
+// not PickButton's red (which specifically means "picking mode is live").
+const ModeButton = ({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) => (
+    <button
+        onClick={onClick}
+        className={`flex-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
+            shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
+            ${active
+                ? 'bg-[linear-gradient(180deg,#4ade80_0%,#22a55e_50%,#15803d_51%,#22a55e_100%)] border-[#14532d] text-white'
+                : 'bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)] border-[#b9c0ba] text-gray-700 hover:brightness-105'}`}
+    >
+        {label}
     </button>
 )
 
@@ -224,34 +241,118 @@ const FunctionBuilderPanel = ({
                     </select>
                 </div>
 
-                {/* Main target slot — every category has exactly one */}
-                <div className='flex flex-col gap-1'>
-                    <label className='text-xs text-gray-500'>{MAIN_SLOT_LABELS[draftCategory]}</label>
-                    <div>
-                        <PickButton
-                            label={mainTargetOf(draftConfig) ? 'Change element' : 'Pick element'}
-                            active={pickTarget === 'main'}
-                            onClick={onStartPickMain}
-                        />
+                {/* Pagination has two independent strategies — pick the mode before
+                    anything else, since it decides whether there's even an element
+                    to pick (url_pattern has none: a template + page range instead). */}
+                {draftConfig.category === 'pagination' && (
+                    <div className='flex flex-col gap-1'>
+                        <label className='text-xs text-gray-500'>Pagination strategy</label>
+                        <div className='flex gap-1'>
+                            <ModeButton
+                                label='Next-page link'
+                                active={draftConfig.mode === 'link'}
+                                onClick={() => {
+                                    if (pickTarget === 'main') onStartPickMain() // cancel any in-flight pick before switching modes
+                                    setDraftConfig({ category: 'pagination', mode: 'link', next: null })
+                                }}
+                            />
+                            <ModeButton
+                                label='URL pattern'
+                                active={draftConfig.mode === 'url_pattern'}
+                                onClick={() => {
+                                    if (pickTarget === 'main') onStartPickMain()
+                                    setDraftConfig({
+                                        category: 'pagination',
+                                        mode: 'url_pattern',
+                                        urlTemplate: suggestUrlTemplate(sourceUrl) ?? '',
+                                        startPage: 1,
+                                        endPage: 10,
+                                    })
+                                }}
+                            />
+                        </div>
                     </div>
-                    {mainTargetOf(draftConfig) && <ElementPreview el={mainTargetOf(draftConfig)!} />}
-                    {draftConfig.category !== 'list' && repeatHint !== null && (
-                        <div className='text-xs text-amber-600'>
-                            ⚠ this element repeats {repeatHint} times on the page — its text will all get
-                            concatenated into one blob. Switch Type to "List" to extract each one as
-                            structured fields instead.
+                )}
+
+                {/* Main target slot — every category has exactly one, except
+                    pagination's url_pattern mode, which has its own form below. */}
+                {!(draftConfig.category === 'pagination' && draftConfig.mode === 'url_pattern') && (
+                    <div className='flex flex-col gap-1'>
+                        <label className='text-xs text-gray-500'>{MAIN_SLOT_LABELS[draftCategory]}</label>
+                        <div>
+                            <PickButton
+                                label={mainTargetOf(draftConfig) ? 'Change element' : 'Pick element'}
+                                active={pickTarget === 'main'}
+                                onClick={onStartPickMain}
+                            />
                         </div>
-                    )}
-                    {draftConfig.category === 'list' && draftConfig.item && groupMatchCount !== null && (
-                        <div className={`text-xs font-mono ${groupMatchCount > 1 ? 'text-[#166534]' : 'text-amber-600'}`}>
-                            {groupMatchCount > 1
-                                ? `✓ ${groupMatchCount} matching items found — selected as a group`
-                                : groupMatchCount === 1
-                                    ? '⚠ only 1 match — pick a less specific element so the whole group is captured'
-                                    : '⚠ no matches for this selector'}
+                        {mainTargetOf(draftConfig) && <ElementPreview el={mainTargetOf(draftConfig)!} />}
+                        {draftConfig.category !== 'list' && repeatHint !== null && (
+                            <div className='text-xs text-amber-600'>
+                                ⚠ this element repeats {repeatHint} times on the page — its text will all get
+                                concatenated into one blob. Switch Type to "List" to extract each one as
+                                structured fields instead.
+                            </div>
+                        )}
+                        {draftConfig.category === 'list' && draftConfig.item && groupMatchCount !== null && (
+                            <div className={`text-xs font-mono ${groupMatchCount > 1 ? 'text-[#166534]' : 'text-amber-600'}`}>
+                                {groupMatchCount > 1
+                                    ? `✓ ${groupMatchCount} matching items found — selected as a group`
+                                    : groupMatchCount === 1
+                                        ? '⚠ only 1 match — pick a less specific element so the whole group is captured'
+                                        : '⚠ no matches for this selector'}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {draftConfig.category === 'pagination' && draftConfig.mode === 'url_pattern' && (
+                    <div className='flex flex-col gap-2'>
+                        <div className='flex flex-col gap-1'>
+                            <label className='text-xs text-gray-500'>URL template — use <code>{'{page}'}</code> as the placeholder</label>
+                            <input
+                                value={draftConfig.urlTemplate}
+                                onChange={(e) => setDraftConfig(prev =>
+                                    prev.category === 'pagination' && prev.mode === 'url_pattern'
+                                        ? { ...prev, urlTemplate: e.target.value } : prev
+                                )}
+                                placeholder='https://example.com/page-{page}.html'
+                                className={`font-mono ${inputClass}`}
+                            />
+                            {!draftConfig.urlTemplate.includes('{page}') && draftConfig.urlTemplate.length > 0 && (
+                                <span className='text-xs text-amber-600'>needs a {'{page}'} placeholder somewhere</span>
+                            )}
                         </div>
-                    )}
-                </div>
+                        <div className='flex gap-2'>
+                            <div className='flex flex-col gap-1 flex-1'>
+                                <label className='text-xs text-gray-500'>Start page</label>
+                                <input
+                                    type='number'
+                                    min={0}
+                                    value={draftConfig.startPage}
+                                    onChange={(e) => setDraftConfig(prev =>
+                                        prev.category === 'pagination' && prev.mode === 'url_pattern'
+                                            ? { ...prev, startPage: Number(e.target.value) } : prev
+                                    )}
+                                    className={inputClass}
+                                />
+                            </div>
+                            <div className='flex flex-col gap-1 flex-1'>
+                                <label className='text-xs text-gray-500'>End page</label>
+                                <input
+                                    type='number'
+                                    min={draftConfig.startPage}
+                                    value={draftConfig.endPage}
+                                    onChange={(e) => setDraftConfig(prev =>
+                                        prev.category === 'pagination' && prev.mode === 'url_pattern'
+                                            ? { ...prev, endPage: Number(e.target.value) } : prev
+                                    )}
+                                    className={inputClass}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Category-specific extra options */}
                 {draftConfig.category === 'text' && (
@@ -483,7 +584,7 @@ function mainTargetOf(config: FnConfig): ElementRef | null {
         case 'links': return config.container
         case 'list': return config.item
         case 'table': return config.table
-        case 'pagination': return config.next
+        case 'pagination': return config.mode === 'link' ? config.next : null
     }
 }
 
