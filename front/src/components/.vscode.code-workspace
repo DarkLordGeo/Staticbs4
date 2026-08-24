@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../../.vscode"
+		},
+		{
+			"path": "../../../backend"
+		},
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../stitch_site_inspector_builder"
+		}
+	]
+}

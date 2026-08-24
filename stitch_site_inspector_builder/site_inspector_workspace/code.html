@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SITE INSPECTOR // VISUAL SCRAPER</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed": "#ffdad7",
+                        "surface-container-low": "#f0f4fc",
+                        "on-error": "#ffffff",
+                        "surface": "#f8f9ff",
+                        "on-tertiary-fixed": "#410004",
+                        "outline-variant": "#bdcabc",
+                        "on-primary-fixed": "#00210d",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-container": "#e1e2e8",
+                        "inverse-primary": "#65dd90",
+                        "secondary-fixed": "#e1e2e8",
+                        "primary-fixed-dim": "#65dd90",
+                        "primary-fixed": "#82faaa",
+                        "surface-bright": "#f8f9ff",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "secondary": "#5c5e63",
+                        "tertiary-container": "#da3437",
+                        "surface-tint": "#006d3a",
+                        "on-secondary-container": "#626469",
+                        "on-primary-fixed-variant": "#00522a",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#44474b",
+                        "inverse-on-surface": "#edf1f9",
+                        "background": "#f8f9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed": "#191c20",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#d6dae3",
+                        "surface-container-highest": "#dfe2eb",
+                        "surface-container": "#eaeef6",
+                        "error": "#ba1a1a",
+                        "outline": "#6e7a6e",
+                        "secondary-fixed-dim": "#c5c6cc",
+                        "on-tertiary-fixed-variant": "#930013",
+                        "tertiary": "#b61722",
+                        "on-primary-container": "#f6fff4",
+                        "inverse-surface": "#2c3137",
+                        "primary": "#006a38",
+                        "on-surface-variant": "#3e4a3f",
+                        "on-tertiary-container": "#fffbff",
+                        "primary-container": "#008648",
+                        "on-secondary": "#ffffff",
+                        "surface-container-high": "#e5e8f1",
+                        "on-surface": "#171c22",
+                        "on-error-container": "#93000a",
+                        "surface-variant": "#dfe2eb",
+                        "on-background": "#171c22",
+                        "chassis": "#e2e4e9",
+                        "chassis-dark": "#d1d5db",
+                        "terminal-bg": "#1a1c1e",
+                        "terminal-green": "#4ade80",
+                        "led-off": "#1f3a28"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "unit": "4px",
+                        "panel-padding": "16px",
+                        "component-gap": "8px",
+                        "gutter": "12px"
+                    },
+                    fontFamily: {
+                        "display-lg": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "terminal-code": ["JetBrains Mono"]
+                    },
+                    fontSize: {
+                        "display-lg": ["32px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "800" }],
+                        "label-caps": ["11px", { lineHeight: "1", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "body-sm": ["14px", { lineHeight: "1.5", fontWeight: "500" }],
+                        "headline-md": ["20px", { lineHeight: "1.4", fontWeight: "700" }],
+                        "terminal-code": ["13px", { lineHeight: "1.6", fontWeight: "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #f8f9ff;
+            /* Fine noise texture */
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+        
+        /* Tactical Bevels & Depth */
+        .chassis-panel {
+            background: linear-gradient(135deg, #f0f4fc 0%, #e2e4e9 100%);
+            box-shadow: 
+                inset 1px 1px 0px rgba(255,255,255,0.8),
+                inset -1px -1px 0px rgba(122,126,133,0.5),
+                0px 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .recessed-well {
+            background-color: #eaeef6;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.2), inset -1px -1px 2px rgba(255,255,255,0.7);
+        }
+
+        .terminal-display {
+            background-color: #1a1c1e;
+            box-shadow: inset 2px 2px 6px rgba(0,0,0,0.5), inset -1px -1px 2px rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .terminal-display::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 1px,
+                rgba(255,255,255,0.05) 1px,
+                rgba(255,255,255,0.05) 2px
+            );
+            pointer-events: none;
+        }
+
+        /* Glossy Hardware Buttons */
+        .hardware-btn-green {
+            background: linear-gradient(180deg, #008648 0%, #006a38 100%);
+            box-shadow: 
+                inset 0px 1px 1px rgba(255,255,255,0.4),
+                0px 2px 4px rgba(0,0,0,0.2);
+            position: relative;
+            transition: all 0.1s ease;
+        }
+        .hardware-btn-green:hover {
+            background: linear-gradient(180deg, #009652 0%, #007a41 100%);
+        }
+        .hardware-btn-green:active {
+            box-shadow: inset 2px 2px 4px rgba(0,0,0,0.4);
+            transform: translateY(1px);
+        }
+        .hardware-btn-green::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+        }
+
+        /* Segmented Metal Toggles */
+        .metal-toggle {
+            background: linear-gradient(180deg, #f8f9ff 0%, #dfe2eb 100%);
+            border: 1px solid #bdcabc;
+            box-shadow: inset 0px 1px 0px rgba(255,255,255,0.8);
+        }
+        .metal-toggle.active {
+            background: #dfe2eb;
+            box-shadow: inset 2px 2px 4px rgba(0,0,0,0.2);
+            border-color: #6e7a6e;
+        }
+
+        /* LED Indicators */
+        .led-green {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background-color: #4ade80;
+            box-shadow: 0 0 4px #4ade80, inset 1px 1px 2px rgba(255,255,255,0.8);
+        }
+        
+        .tactical-crosshair {
+            cursor: crosshair;
+        }
+        
+        .pulse-border {
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        
+        /* Riveted Plate */
+        .rivet-plate {
+            background: #dfe2eb;
+            border: 1px solid #bdcabc;
+            position: relative;
+        }
+        .rivet-plate::before, .rivet-plate::after {
+            content: '';
+            position: absolute;
+            width: 4px; height: 4px;
+            background: #6e7a6e;
+            border-radius: 50%;
+            box-shadow: inset 1px 1px 1px rgba(0,0,0,0.5), 1px 1px 0px rgba(255,255,255,0.8);
+            top: 50%; transform: translateY(-50%);
+        }
+        .rivet-plate::before { left: 4px; }
+        .rivet-plate::after { right: 4px; }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col font-body-sm text-on-surface bg-background">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-panel-padding bg-surface-dim dark:bg-surface-dim border-b border-outline-variant shadow-[0px_2px_4px_rgba(0,0,0,0.2)] docked full-width top-0 h-12 shadow-[inset_0px_1px_0px_rgba(255,255,255,0.4)] z-50">
+<div class="flex items-center gap-component-gap">
+<div class="led-green"></div>
+<div class="font-display-lg text-headline-md tracking-tighter text-on-surface uppercase flex items-center gap-2">
+                SITE INSPECTOR
+            </div>
+<div class="rivet-plate px-4 py-0.5 ml-2 font-terminal-code text-label-caps text-on-surface-variant flex items-center">
+                READY
+            </div>
+</div>
+<div class="flex items-center gap-gutter">
+<span class="font-terminal-code text-label-caps text-on-surface-variant mr-4">VISUAL SCRAPER BUILDER</span>
+<button class="text-on-surface-variant hover:bg-surface-container-high transition-colors p-1 rounded">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container-high transition-colors p-1 rounded">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">developer_board</span>
+</button>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-1 flex gap-gutter p-gutter overflow-hidden h-[calc(100vh-48px)]">
+<!-- Left Panel: Website Inspector (66%) -->
+<section class="w-2/3 h-full flex flex-col chassis-panel rounded-DEFAULT border border-outline-variant p-panel-padding gap-component-gap">
+<!-- URL Control Strip -->
+<div class="recessed-well p-2 rounded-sm border border-outline-variant flex gap-2 items-center">
+<div class="terminal-display flex-1 h-8 rounded-sm px-3 flex items-center border border-outline">
+<span class="font-terminal-code text-terminal-code text-terminal-green w-full truncate">https://example-news-site.com/tech/new-processor-release</span>
+</div>
+<button class="hardware-btn-green h-8 px-4 rounded-sm flex items-center gap-2 font-label-caps text-on-primary">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                    GET WEBSITE CONTENT
+                </button>
+</div>
+<!-- Preview Frame -->
+<div class="flex-1 chassis-panel border-2 border-outline flex flex-col rounded-sm overflow-hidden relative">
+<!-- Frame Header -->
+<div class="bg-surface-variant border-b border-outline-variant px-3 py-1 flex justify-between items-center h-8">
+<span class="font-terminal-code text-label-caps text-on-surface-variant">PREVIEW</span>
+<div class="flex items-center gap-2">
+<div class="led-green"></div>
+<span class="font-terminal-code text-label-caps text-on-surface-variant">LIVE RENDER</span>
+</div>
+</div>
+<!-- Inner Canvas (Simulated Browser) -->
+<div class="flex-1 bg-surface-container-lowest overflow-hidden relative tactical-crosshair">
+<!-- Simulated Webpage Content -->
+<div class="p-8 max-w-3xl mx-auto pointer-events-none">
+<header class="mb-8 border-b-2 border-gray-200 pb-4">
+<!-- TARGET ELEMENT -->
+<div class="relative inline-block border-2 border-red-500 pulse-border bg-red-50">
+<h1 class="text-4xl font-bold text-gray-900 mb-2">Next-Gen Processor Architecture Unveiled</h1>
+<!-- Tooltip -->
+<div class="absolute -top-8 left-0 bg-red-600 text-white font-terminal-code text-[10px] px-2 py-1 shadow-lg whitespace-nowrap z-10 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">center_focus_strong</span>
+                                    PICK MODE ACTIVE
+                                </div>
+</div>
+<p class="text-gray-500 text-sm mt-2">By Tech Editor • Published Oct 24, 2024</p>
+</header>
+<article class="prose prose-slate">
+<p class="text-gray-700 leading-relaxed mb-4">The tech industry was shaken today as the leading silicon manufacturer announced their revolutionary new architecture, promising unprecedented efficiency gains...</p>
+<img class="w-full h-64 object-cover rounded-md mb-4 border border-gray-300" data-alt="A detailed digital illustration of a futuristic, glowing silicon microchip embedded in a dense, technical circuit board. The lighting is high-key and bright, fitting a light-mode UI, with precise geometric lines in silver and metallic gray. A vibrant, electric-green light pulses from the center of the processor, emphasizing power and advanced technology within an industrial, high-tech laboratory aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpF773S6b_jvngGpe7jnqqBWrXalgi2yyHcdrgV_F17W0NyuIsO09jeBRtSu5pYXecNZMt7gxTocuk0LRAfwsjYu-VY8G4ek4QmaZs4PShOIzr0qN5nOz1hfO441ogGeRaKIuHKGFGP5ID7PtVeVRMwFCMrqZXZc0fExojgKC_uqDYnZivXzDRaKWTCmwadjlDtomPQ2aQSiPCWm3_RrdkqkBXXYsXygBHSuSElAR103Cl4U6IvTKw"/>
+<p class="text-gray-700 leading-relaxed">Early benchmarks suggest a 40% performance increase in heavy computational workloads...</p>
+</article>
+</div>
+<!-- Scanline Overlay -->
+<div class="absolute inset-0 pointer-events-none" style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px);"></div>
+</div>
+</div>
+</section>
+<!-- Right Panel: Function Builder (34%) -->
+<section class="w-1/3 h-full flex flex-col chassis-panel rounded-DEFAULT border border-outline-variant p-panel-padding gap-gutter">
+<!-- Title Area -->
+<header class="border-b border-outline-variant pb-2">
+<h2 class="font-display-lg text-headline-md text-on-surface">FUNCTION BUILDER</h2>
+<p class="font-terminal-code text-label-caps text-on-surface-variant">DEFINE EXTRACTION RULE</p>
+</header>
+<!-- Function Name Input -->
+<div class="flex flex-col gap-1">
+<label class="font-terminal-code text-label-caps text-on-surface-variant">FUNCTION NAME</label>
+<div class="recessed-well p-1 rounded-sm border border-outline-variant">
+<input class="w-full bg-transparent border-none focus:ring-0 font-terminal-code text-terminal-code text-on-surface px-2 h-8" readonly="" type="text" value="get_article_title"/>
+</div>
+</div>
+<!-- Category Selector -->
+<div class="flex flex-col gap-1">
+<label class="font-terminal-code text-label-caps text-on-surface-variant">DATA TYPE</label>
+<div class="grid grid-cols-3 gap-1 recessed-well p-1 rounded-sm border border-outline-variant">
+<button class="metal-toggle active flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">title</span>
+<span class="font-label-caps text-[9px] text-primary">Header</span>
+</button>
+<button class="metal-toggle flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">short_text</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">Text</span>
+</button>
+<button class="metal-toggle flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">link</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">Links</span>
+</button>
+<button class="metal-toggle flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">format_list_bulleted</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">List</span>
+</button>
+<button class="metal-toggle flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">table</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">Table</span>
+</button>
+<button class="metal-toggle flex flex-col items-center justify-center py-2 rounded-sm gap-1">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">last_page</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">Pagination</span>
+</button>
+</div>
+</div>
+<!-- Extraction Settings -->
+<div class="flex flex-col gap-1">
+<label class="font-terminal-code text-label-caps text-on-surface-variant">TARGET ELEMENT</label>
+<div class="recessed-well p-3 rounded-sm border border-outline-variant flex flex-col gap-3 items-center justify-center min-h-[100px]">
+<p class="font-body-sm text-on-surface-variant text-center text-xs">Select an element in the PREVIEW panel to bind it to this function.</p>
+<button class="hardware-btn-green px-6 py-2 rounded-sm flex items-center gap-2 font-label-caps text-on-primary">
+<span class="material-symbols-outlined text-[18px]">ads_click</span>
+                        PICK ELEMENT
+                    </button>
+</div>
+</div>
+<div class="border-t border-outline-variant my-2"></div>
+<!-- Created Functions List -->
+<div class="flex flex-col gap-2 flex-1 min-h-0">
+<header class="flex justify-between items-center">
+<h3 class="font-terminal-code text-label-caps text-on-surface-variant">ACTIVE FUNCTIONS (2)</h3>
+</header>
+<div class="recessed-well p-2 rounded-sm border border-outline-variant flex-1 overflow-y-auto flex flex-col gap-2">
+<!-- Function Row 1 -->
+<div class="bg-surface-container-lowest border border-outline p-2 rounded-sm flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary">title</span>
+<div class="flex flex-col">
+<span class="font-terminal-code text-terminal-code text-on-surface leading-tight">get_title</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">TYPE: Header</span>
+</div>
+</div>
+<button class="text-error hover:bg-error-container p-1 rounded transition-colors">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<!-- Function Row 2 -->
+<div class="bg-surface-container-lowest border border-outline p-2 rounded-sm flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-secondary">format_list_bulleted</span>
+<div class="flex flex-col">
+<span class="font-terminal-code text-terminal-code text-on-surface leading-tight">get_articles</span>
+<span class="font-label-caps text-[9px] text-on-surface-variant">TYPE: List</span>
+</div>
+</div>
+<button class="text-error hover:bg-error-container p-1 rounded transition-colors">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+</body></html>
