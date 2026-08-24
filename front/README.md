@@ -1,4 +1,6 @@
-# React + TypeScript + Vite
+# VisualBs4Scraper
+
+React + TypeScript + Vite frontend for VisualBs4Scraper — pick elements on a live page and get back working BeautifulSoup extraction code.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

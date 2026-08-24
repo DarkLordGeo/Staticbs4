@@ -4,9 +4,9 @@ const Header = () => {
   return (
     <div
       className="
-        flex items-center justify-between px-6 py-3.5
+        flex items-center justify-between px-6 py-3.5 rounded-xl
         bg-[linear-gradient(180deg,#d8dbe0_0%,#b6bac1_45%,#9a9ea6_46%,#babdc4_100%)]
-        border-b border-[#6f727a]
+        border border-[#a5a9b0]
         shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-3px_6px_rgba(0,0,0,0.15),0_2px_4px_rgba(0,0,0,0.25)]
       "
     >
@@ -31,9 +31,9 @@ const Header = () => {
 
       <div
         className="
-          flex items-center gap-2 px-2.5 py-1 rounded
+          flex items-center gap-2 px-2.5 py-1 rounded-full
           bg-[linear-gradient(180deg,#1e2b23,#0f1811)]
-          border border-[#0a120d]
+          border border-[#1f3a28]
           shadow-[inset_0_1px_3px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.15)]
         "
       >

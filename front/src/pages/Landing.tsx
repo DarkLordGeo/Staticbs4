@@ -55,11 +55,11 @@ const Landing = () => {
                     className="
                         mt-2 px-8 py-3 rounded-lg
                         font-sans font-bold text-sm tracking-[0.08em] uppercase
-                        text-[#eef1f4]
-                        bg-[linear-gradient(180deg,#5b6b7a_0%,#3d4a56_50%,#2c3640_51%,#414d59_100%)]
-                        border border-[#252c33]
-                        shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.3)]
-                        transition-transform
+                        text-white
+                        bg-[linear-gradient(180deg,#4ade80_0%,#22a55e_50%,#15803d_51%,#22a55e_100%)]
+                        border border-[#14532d]
+                        shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.3)]
+                        transition-[filter,transform]
                         hover:brightness-110
                         active:translate-y-px
                         active:shadow-[inset_0_2px_5px_rgba(0,0,0,0.5)]

@@ -44,5 +44,8 @@ def proxy_asset():
 
 
 if __name__ == '__main__':
-    app.run()
+    # 0.0.0.0 so this is reachable from outside a Docker container (port
+    # mapping to a loopback-bound server wouldn't work); harmless for plain
+    # local runs too — the frontend still reaches it at 127.0.0.1:5000.
+    app.run(host='0.0.0.0', port=5000)
 
