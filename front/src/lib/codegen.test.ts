@@ -164,6 +164,50 @@ describe('generatePythonCode', () => {
         expect(code).toContain('entry["raw"] = raw.decode_contents() if raw else None')
     })
 
+    it('groups JSON by page when perPageJson is enabled in crawl mode', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            {
+                id: '2', name: 'paginate',
+                config: { category: 'pagination', mode: 'url_pattern', urlTemplate: 'https://example.com/page-{page}.html', startPage: 1, endPage: 3 },
+            },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { json: true, perPageJson: true })
+        expect(code).toContain('results, by_page = crawl()')
+        expect(code).toContain('by_page = {name: {} for name in LIST_FUNCTIONS}')
+        expect(code).toContain('by_page[name][f"page_{page}"] = items')
+        expect(code).toContain('json.dump(by_page, f, indent=2, ensure_ascii=False)')
+        expect(code).toContain('return results, by_page')
+    })
+
+    it('groups by visit count in link-mode crawl, and still merges non-paginated functions into by_page', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            { id: '2', name: 'get_next', config: { category: 'pagination', mode: 'link', next: ref('#next', 'a') } },
+            { id: '3', name: 'get_title', config: header(ref('h1')) },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { json: true, perPageJson: true })
+        expect(code).toContain('by_page[name][f"page_{pages + 1}"] = items')
+        expect(code).toContain('by_page["get_title"] = get_title_value')
+    })
+
+    it('ignores perPageJson outside crawl mode (falls back to flat JSON)', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
+        const code = generatePythonCode(functions, 'https://example.com', { json: true, perPageJson: true })
+        expect(code).not.toContain('by_page')
+        expect(code).toContain('json.dump(results, f, indent=2, ensure_ascii=False)')
+    })
+
+    it('ignores perPageJson when json export itself is off', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            { id: '2', name: 'get_next', config: { category: 'pagination', mode: 'link', next: ref('#next', 'a') } },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { perPageJson: true })
+        expect(code).not.toContain('by_page')
+        expect(code).toContain('results = crawl()')
+    })
+
     it('supports both export formats together in crawl mode, keyed by the results dict', () => {
         const functions: FnGroup[] = [
             { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },

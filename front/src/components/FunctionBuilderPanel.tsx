@@ -241,7 +241,15 @@ const FunctionBuilderPanel = ({
 }: Props) => {
     const [exportJson, setExportJson] = useState(false)
     const [exportXlsx, setExportXlsx] = useState(false)
-    const exportOptions = useMemo(() => ({ json: exportJson, xlsx: exportXlsx }), [exportJson, exportXlsx])
+    const [perPageJson, setPerPageJson] = useState(false)
+    // Per-page JSON only means anything once a List function is actually
+    // being crawled across multiple pages by a Pagination function.
+    const crawlMode = functions.some(fn => fn.config.category === 'pagination')
+        && functions.some(fn => fn.config.category === 'list')
+    const exportOptions = useMemo(
+        () => ({ json: exportJson, xlsx: exportXlsx, perPageJson: perPageJson && crawlMode }),
+        [exportJson, exportXlsx, perPageJson, crawlMode]
+    )
     const code = useMemo(() => generatePythonCode(functions, sourceUrl, exportOptions), [functions, sourceUrl, exportOptions])
     const [copied, setCopied] = useState(false)
 
@@ -624,7 +632,7 @@ const FunctionBuilderPanel = ({
 
             {functions.length > 0 && (
                 <div className='mt-4 flex flex-col gap-2'>
-                    <div className='flex items-center justify-between'>
+                    <div className='flex items-center justify-between flex-wrap gap-y-1'>
                         <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Generated Python</div>
                         <div className='flex items-center gap-3'>
                             <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
@@ -636,6 +644,17 @@ const FunctionBuilderPanel = ({
                                 />
                                 Also write JSON
                             </label>
+                            {exportJson && crawlMode && (
+                                <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
+                                    <input
+                                        type='checkbox'
+                                        checked={perPageJson}
+                                        onChange={e => setPerPageJson(e.target.checked)}
+                                        className='accent-[#2b6b3f]'
+                                    />
+                                    Group by page
+                                </label>
+                            )}
                             <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
                                 <input
                                     type='checkbox'
@@ -645,28 +664,6 @@ const FunctionBuilderPanel = ({
                                 />
                                 Also write XLSX
                             </label>
-                            <button
-                                onClick={handleDownload}
-                                className='
-                                    text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
-                                    shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
-                                    bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
-                                    border-[#b9c0ba] text-gray-700 hover:brightness-105
-                                '
-                            >
-                                Download
-                            </button>
-                            <button
-                                onClick={handleCopy}
-                                className='
-                                    text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
-                                    shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
-                                    bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
-                                    border-[#b9c0ba] text-gray-700 hover:brightness-105
-                                '
-                            >
-                                {copied ? 'Copied!' : 'Copy'}
-                            </button>
                         </div>
                     </div>
                     <pre
@@ -680,6 +677,30 @@ const FunctionBuilderPanel = ({
                     >
                         {code}
                     </pre>
+                    <div className='flex items-center gap-2 justify-end'>
+                        <button
+                            onClick={handleDownload}
+                            className='
+                                text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
+                                shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
+                                bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
+                                border-[#b9c0ba] text-gray-700 hover:brightness-105
+                            '
+                        >
+                            Download
+                        </button>
+                        <button
+                            onClick={handleCopy}
+                            className='
+                                text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors
+                                shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.15)]
+                                bg-[linear-gradient(180deg,#f7f8f7_0%,#e2e6e3_100%)]
+                                border-[#b9c0ba] text-gray-700 hover:brightness-105
+                            '
+                        >
+                            {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

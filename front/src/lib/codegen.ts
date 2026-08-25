@@ -4,11 +4,17 @@
 
 import type { ExtractMode, FnConfig, FnGroup } from '../types/builder'
 
-// Which extra output formats to write alongside the printed results —
-// both default off so existing generated code (and its tests) is unchanged.
+// Which extra output formats to write alongside the printed results — all
+// default off so existing generated code (and its tests) is unchanged.
 export interface ExportOptions {
     json?: boolean
     xlsx?: boolean
+    // Only meaningful when json is also on AND a crawl (list + pagination)
+    // is active: groups each list function's JSON output by the page it
+    // came from — {"page_1": [...], "page_2": [...]} — instead of merging
+    // every page's items into one flat list. Single-page functions in the
+    // same script are unaffected (there's only ever one page for those).
+    perPageJson?: boolean
 }
 
 export const pyStr = (s: string): string => JSON.stringify(s)
@@ -179,16 +185,19 @@ const genPreamble = (sourceUrl: string, needsUrljoin: boolean, exportOptions: Ex
     ].filter((l): l is string => l !== null).join('\n')
 }
 
-// Shared by both single-page and crawl mains: given a `results` dict already
-// in scope, optionally write it out as JSON and/or one XLSX sheet per key.
-// Indented by the caller to whatever level `results` lives at.
-const genExportEpilogue = (exportOptions: ExportOptions): string[] => {
+// Shared by both single-page and crawl mains: given a dict already in
+// scope, optionally write it out as JSON and/or one XLSX sheet per key.
+// Indented by the caller to whatever level that dict lives at. JSON and
+// XLSX can read from *different* dicts (crawl mode's per-page JSON option
+// reads the page-keyed `by_page` dict, while XLSX always reads the flat
+// `results` — a spreadsheet doesn't gain anything from per-page sheets).
+const genExportEpilogue = (exportOptions: ExportOptions, vars: { json: string; xlsx: string } = { json: 'results', xlsx: 'results' }): string[] => {
     const lines: string[] = []
     if (exportOptions.json) {
         lines.push(
             '',
             'with open("results.json", "w", encoding="utf-8") as f:',
-            '    json.dump(results, f, indent=2, ensure_ascii=False)',
+            `    json.dump(${vars.json}, f, indent=2, ensure_ascii=False)`,
             'print("Wrote results.json")',
         )
     }
@@ -197,7 +206,7 @@ const genExportEpilogue = (exportOptions: ExportOptions): string[] => {
             '',
             'workbook = Workbook()',
             'workbook.remove(workbook.active)',
-            'for name, value in results.items():',
+            `for name, value in ${vars.xlsx}.items():`,
             '    sheet = workbook.create_sheet(title=name[:31])  # Excel sheet names cap at 31 chars',
             '    if isinstance(value, list) and value and isinstance(value[0], dict):',
             '        headers = list(value[0].keys())',
@@ -252,6 +261,11 @@ const genCrawlMain = (
         '}',
     ].join('\n')
 
+    // Grouping JSON by page needs the page each item came from tracked
+    // *during* the crawl — results is already merged flat by the time
+    // crawl() returns, and there's no way to un-merge it afterward.
+    const perPage = Boolean(exportOptions.json && exportOptions.perPageJson)
+
     const crawlDef = config.mode === 'url_pattern'
         ? [
             `URL_TEMPLATE = ${pyStr(config.urlTemplate)}`,
@@ -263,12 +277,19 @@ const genCrawlMain = (
             '    """Step through URL_TEMPLATE from START_PAGE to END_PAGE (inclusive),',
             '    running every list function on each page and accumulating results."""',
             '    results = {name: [] for name in LIST_FUNCTIONS}',
+            ...(perPage ? ['    by_page = {name: {} for name in LIST_FUNCTIONS}'] : []),
             '    for page in range(START_PAGE, END_PAGE + 1):',
             '        url = URL_TEMPLATE.format(page=page)',
             '        soup = fetch_soup(url)',
             '        for name, fn in LIST_FUNCTIONS.items():',
-            '            results[name].extend(fn(soup))',
-            '    return results',
+            ...(perPage
+                ? [
+                    '            items = fn(soup)',
+                    '            results[name].extend(items)',
+                    '            by_page[name][f"page_{page}"] = items',
+                ]
+                : ['            results[name].extend(fn(soup))']),
+            perPage ? '    return results, by_page' : '    return results',
         ].join('\n')
         : [
             'MAX_PAGES = 20',
@@ -280,24 +301,42 @@ const genCrawlMain = (
             '    url = start_url',
             '    pages = 0',
             '    results = {name: [] for name in LIST_FUNCTIONS}',
+            ...(perPage ? ['    by_page = {name: {} for name in LIST_FUNCTIONS}'] : []),
             '    while url and pages < max_pages:',
             '        soup = fetch_soup(url)',
             '        for name, fn in LIST_FUNCTIONS.items():',
-            '            results[name].extend(fn(soup))',
+            ...(perPage
+                ? [
+                    '            items = fn(soup)',
+                    '            results[name].extend(items)',
+                    '            by_page[name][f"page_{pages + 1}"] = items',
+                ]
+                : ['            results[name].extend(fn(soup))']),
             `        next_href = ${names.get(paginationFn.id)!}(soup)`,
             '        url = urljoin(url, next_href) if next_href else None',
             '        pages += 1',
-            '    return results',
+            perPage ? '    return results, by_page' : '    return results',
         ].join('\n')
 
     const main = [
         'if __name__ == "__main__":',
-        '    results = crawl()',
+        perPage ? '    results, by_page = crawl()' : '    results = crawl()',
         ...(otherFns.length > 0
             ? [
                 '',
                 '    soup = fetch_soup()  # single-page functions below run once, against the first page',
-                ...otherFns.map(fn => `    results[${pyStr(names.get(fn.id)!)}] = ${names.get(fn.id)}(soup)`),
+                ...otherFns.flatMap(fn => {
+                    const key = pyStr(names.get(fn.id)!)
+                    if (!perPage) return [`    results[${key}] = ${names.get(fn.id)}(soup)`]
+                    // Not paginated, so nothing to group by page — but still
+                    // needs to show up in by_page, since that's what gets
+                    // written to results.json in this mode.
+                    return [
+                        `    ${names.get(fn.id)}_value = ${names.get(fn.id)}(soup)`,
+                        `    results[${key}] = ${names.get(fn.id)}_value`,
+                        `    by_page[${key}] = ${names.get(fn.id)}_value`,
+                    ]
+                }),
                 '',
             ]
             : []),
@@ -306,7 +345,7 @@ const genCrawlMain = (
         '            print(f"{name}: {len(value)} items")',
         '        else:',
         '            print(f"{name}:", value)',
-        ...indent(genExportEpilogue(exportOptions)),
+        ...indent(genExportEpilogue(exportOptions, { json: perPage ? 'by_page' : 'results', xlsx: 'results' })),
     ].join('\n')
 
     return [listFunctionsBlock, crawlDef, main].join('\n\n\n')
