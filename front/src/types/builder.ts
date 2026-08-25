@@ -9,7 +9,27 @@ export type ElementRef = { tag: string; html: string; selector: string }
 
 export type FnCategory = 'header' | 'text' | 'links' | 'list' | 'table' | 'pagination'
 
-export type ListField = { id: string; name: string; ref: ElementRef }
+// What to pull out of a picked element: its text, its inner HTML, or one
+// specific attribute (an <img>'s src, an <a>'s href, a data-* attribute,
+// anything the element actually has). Generalizes past the old text/html-only
+// choice so a picked element isn't limited to whatever text it happens to
+// contain — an <img> has none, but its src is exactly what's usually wanted.
+export type ExtractMode =
+    | { kind: 'text' }
+    | { kind: 'html' }
+    | { kind: 'attr'; name: string }
+
+export const defaultExtractMode: ExtractMode = { kind: 'text' }
+
+export const extractModeLabel = (m: ExtractMode): string => {
+    switch (m.kind) {
+        case 'text': return 'text'
+        case 'html': return 'html'
+        case 'attr': return `attr:${m.name}`
+    }
+}
+
+export type ListField = { id: string; name: string; ref: ElementRef; extract: ExtractMode }
 
 // Pagination has two independent strategies: follow a picked "next page"
 // link element (works for any markup, but needs the link to actually be
@@ -23,8 +43,8 @@ export type PaginationConfig =
     | { mode: 'url_pattern'; urlTemplate: string; startPage: number; endPage: number }
 
 export type FnConfig =
-    | { category: 'header'; target: ElementRef | null }
-    | { category: 'text'; target: ElementRef | null; mode: 'text' | 'html' }
+    | { category: 'header'; target: ElementRef | null; extract: ExtractMode }
+    | { category: 'text'; target: ElementRef | null; extract: ExtractMode }
     | { category: 'links'; container: ElementRef | null; extract: 'text' | 'href' | 'both' }
     | { category: 'list'; item: ElementRef | null; fields: ListField[] }
     | { category: 'table'; table: ElementRef | null; firstRowIsHeader: boolean }
@@ -55,8 +75,8 @@ export const MAIN_SLOT_LABELS: Record<FnCategory, string> = {
 
 export const emptyConfigFor = (category: FnCategory): FnConfig => {
     switch (category) {
-        case 'header': return { category, target: null }
-        case 'text': return { category, target: null, mode: 'text' }
+        case 'header': return { category, target: null, extract: defaultExtractMode }
+        case 'text': return { category, target: null, extract: defaultExtractMode }
         case 'links': return { category, container: null, extract: 'text' }
         case 'list': return { category, item: null, fields: [] }
         case 'table': return { category, table: null, firstRowIsHeader: true }
@@ -81,8 +101,8 @@ export const isConfigComplete = (config: FnConfig): boolean => {
 export const summarizeFn = (fn: FnGroup): string => {
     const c = fn.config
     switch (c.category) {
-        case 'header': return c.target ? `<${c.target.tag}>` : 'no target'
-        case 'text': return `${c.target ? `<${c.target.tag}>` : 'no target'} · ${c.mode}`
+        case 'header': return `${c.target ? `<${c.target.tag}>` : 'no target'} · ${extractModeLabel(c.extract)}`
+        case 'text': return `${c.target ? `<${c.target.tag}>` : 'no target'} · ${extractModeLabel(c.extract)}`
         case 'links': return `${c.container ? `<${c.container.tag}>` : 'no container'} · extract ${c.extract}`
         case 'list': return `${c.item ? `<${c.item.tag}>` : 'no item'} · ${c.fields.length} field${c.fields.length === 1 ? '' : 's'}`
         case 'table': return `${c.table ? '<table>' : 'no table'} · header row: ${c.firstRowIsHeader ? 'yes' : 'no'}`

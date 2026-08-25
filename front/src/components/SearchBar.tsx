@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import FunctionBuilderPanel from './FunctionBuilderPanel'
-import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder'
+import type { ElementRef, ExtractMode, FnCategory, FnConfig, FnGroup } from '../types/builder'
 import { emptyConfigFor, isConfigComplete } from '../types/builder'
 import { absoluteSelector, fieldSelectorFor, groupSelector, nearestRepeatingElement } from '../lib/selector'
+import { ancestorChain, defaultExtractModeFor } from '../lib/elementLayers'
 import { runExtraction, type ExtractionResult } from '../lib/extract'
 import { loadWorkspace, saveWorkspace } from '../lib/persistence'
 import { detectFields, type FieldCandidate } from '../lib/autoFields'
@@ -52,8 +53,45 @@ const SearchBar = () => {
   useEffect(() => { draftConfigRef.current = draftConfig }, [draftConfig])
 
   // only 'field' picks need a name prompt — main-slot picks apply immediately
-  const [naming, setNaming] = useState<ElementRef | null>(null)
+  const [naming, setNaming] = useState<{ ref: ElementRef; extract: ExtractMode } | null>(null)
   const [nameInput, setNameInput] = useState("")
+
+  // A click only ever gives you the exact element under the cursor — this
+  // holds the "layer picker" session that lets it be refined (move up to an
+  // ancestor, down into a child, choose what to extract) before it's
+  // actually applied to the function being built. `chain` is the path from
+  // the topmost kept ancestor down to whichever level is currently
+  // selected (always the last entry); `extract` is null for categories
+  // that don't have a choosable extraction (list item, links container,
+  // table, pagination's next-link).
+  const [layerPick, setLayerPick] = useState<{ mode: 'main' | 'field'; chain: Element[]; extract: ExtractMode | null } | null>(null)
+
+  // Mutates the live iframe DOM directly (a locked-on outline for whatever
+  // layerPick currently points at) rather than going through React state —
+  // same "synchronize with an external system" case as the group-highlight
+  // effect below, just imperative style instead of a CSS class. The lint
+  // rule below assumes anything reachable from useState is React-owned data
+  // and shouldn't be mutated in place — but `chain` holds live DOM Elements
+  // from the iframe's document, not app data; React only ever reads the
+  // array/its length to render the breadcrumb, never the elements' own
+  // mutable style state, so mutating that style directly is safe here.
+  const layerHighlightRef = useRef<HTMLElement | null>(null)
+  /* eslint-disable react-hooks/immutability -- see comment above: `current`
+     is a live iframe DOM Element, not React-owned data, even though it's
+     reachable through layerPick's state */
+  useEffect(() => {
+    if (layerHighlightRef.current) {
+      layerHighlightRef.current.style.outline = ""
+      layerHighlightRef.current.style.backgroundColor = ""
+    }
+    const current = layerPick?.chain[layerPick.chain.length - 1] as HTMLElement | undefined
+    if (current) {
+      current.style.outline = "2px solid #2563eb"
+      current.style.backgroundColor = "rgba(37, 99, 235, 0.12)"
+    }
+    layerHighlightRef.current = current ?? null
+  }, [layerPick])
+  /* eslint-enable react-hooks/immutability */
 
   // Suggested sub-fields for the just-picked list item, offered as a bulk
   // checklist instead of making the user manually pick each column/field.
@@ -151,6 +189,79 @@ const SearchBar = () => {
     })
   }
 
+  // Both of these change which element is "current" — the extract mode has
+  // to be recomputed for it, not carried over from whatever level was
+  // selected before. Carrying it over is actively wrong: e.g. an <a> with no
+  // text defaults to attr:href, but descending into its <img> shouldn't keep
+  // "href" selected — an <img> doesn't have one, and silently landing on the
+  // wrong attribute (or a blank custom one) would go unnoticed.
+  const layerSelectLevel = (index: number) => {
+    setLayerPick(prev => {
+      if (!prev) return prev
+      const chain = prev.chain.slice(0, index + 1)
+      return { ...prev, chain, extract: prev.extract !== null ? defaultExtractModeFor(chain[chain.length - 1]) : null }
+    })
+  }
+
+  const layerDescend = (child: Element) => {
+    setLayerPick(prev => {
+      if (!prev) return prev
+      const chain = [...prev.chain, child]
+      return { ...prev, chain, extract: prev.extract !== null ? defaultExtractModeFor(child) : null }
+    })
+  }
+
+  const layerExtractChange = (mode: ExtractMode) => {
+    setLayerPick(prev => (prev && prev.extract !== null ? { ...prev, extract: mode } : prev))
+  }
+
+  const layerCancel = () => setLayerPick(null)
+
+  // Turns whatever level+extract-mode the layer picker landed on into an
+  // actual ElementRef and applies it — the same selector logic the click
+  // handler used to run immediately, just deferred until confirmed.
+  const layerConfirm = () => {
+    if (!layerPick) return
+    const doc = iframeRef.current?.contentDocument
+    const cfg = draftConfigRef.current
+    const target = layerPick.chain[layerPick.chain.length - 1] as HTMLElement
+    const isListItemPick = layerPick.mode === 'main' && cfg.category === 'list'
+    const selector = layerPick.mode === 'field'
+      ? fieldSelectorFor(target, cfg)
+      : isListItemPick
+        ? groupSelector(target) // match the whole repeating group, not just this row
+        : absoluteSelector(target)
+    const ref: ElementRef = { tag: target.tagName.toLowerCase(), html: target.outerHTML, selector }
+
+    if (layerPick.mode === 'field') {
+      setNaming({ ref, extract: layerPick.extract ?? { kind: 'text' } })
+    } else {
+      applyMainPick(ref)
+      const extract = layerPick.extract
+      if (extract) {
+        setDraftConfig(prev =>
+          (prev.category === 'header' || prev.category === 'text') ? { ...prev, extract } : prev
+        )
+      }
+      if (isListItemPick) {
+        setDetectedFields(detectFields(target))
+        setRepeatHint(null)
+      } else {
+        setDetectedFields(null)
+        // Same repeat-detection used for list items, applied here purely
+        // as a hint: does this element (picked for a single-target
+        // category) actually repeat elsewhere on the page? If so, its
+        // whole-subtree get_text() is probably not what was wanted.
+        let count = 0
+        if (doc) {
+          try { count = doc.querySelectorAll(groupSelector(nearestRepeatingElement(target))).length } catch { /* invalid selector — no hint */ }
+        }
+        setRepeatHint(count > 1 ? count : null)
+      }
+    }
+    setLayerPick(null)
+  }
+
   // Runs once per iframe (re)load, i.e. once per new siteValue, since a
   // srcDoc change fully replaces the iframe's document.
   const handleIframeLoad = () => {
@@ -211,32 +322,16 @@ const SearchBar = () => {
         const isListItemPick = mode === 'main' && cfg.category === 'list'
         // For the list 'item' slot, the click almost never lands on the row/card
         // itself (it lands on a cell's text, a heading, ...) — climb to the
-        // actual repeating element so "click anywhere in one row" works.
-        const target = isListItemPick ? nearestRepeatingElement(clicked) : clicked
-        const selector = mode === 'field'
-          ? fieldSelectorFor(target, cfg)
-          : isListItemPick
-            ? groupSelector(target) // match the whole repeating group, not just this row
-            : absoluteSelector(target)
-        const ref: ElementRef = { tag: target.tagName.toLowerCase(), html: target.outerHTML, selector }
-        if (mode === 'field') {
-          setNaming(ref)
-        } else {
-          applyMainPick(ref)
-          if (isListItemPick) {
-            setDetectedFields(detectFields(target))
-            setRepeatHint(null)
-          } else {
-            setDetectedFields(null)
-            // Same repeat-detection used for list items, applied here purely
-            // as a hint: does this element (picked for a single-target
-            // category) actually repeat elsewhere on the page? If so, its
-            // whole-subtree get_text() is probably not what was wanted.
-            let count = 0
-            try { count = doc.querySelectorAll(groupSelector(nearestRepeatingElement(clicked))).length } catch { /* invalid selector — no hint */ }
-            setRepeatHint(count > 1 ? count : null)
-          }
-        }
+        // actual repeating element so "click anywhere in one row" works. This
+        // is just the *default* level the layer picker opens on — ancestors
+        // and children are both still reachable from there before confirming.
+        const initialTarget = isListItemPick ? nearestRepeatingElement(clicked) : clicked
+        const showExtract = mode === 'field' || cfg.category === 'header' || cfg.category === 'text'
+        setLayerPick({
+          mode,
+          chain: ancestorChain(initialTarget),
+          extract: showExtract ? defaultExtractModeFor(initialTarget) : null,
+        })
         setPickTarget(null)
       }
     }
@@ -252,6 +347,7 @@ const SearchBar = () => {
     setDraftCategory(category)
     setDraftConfig(emptyConfigFor(category))
     setPickTarget(null)
+    setLayerPick(null)
     setNaming(null)
     setDetectedFields(null)
     setRepeatHint(null)
@@ -259,7 +355,7 @@ const SearchBar = () => {
 
   // Bulk-adds the checked/renamed detected-field candidates in one go,
   // instead of the user manually picking + naming each one.
-  const addDetectedFields = (selected: { tag: string; selector: string; name: string }[]) => {
+  const addDetectedFields = (selected: { tag: string; selector: string; name: string; extract: ExtractMode }[]) => {
     setDraftConfig(prev =>
       prev.category === 'list'
         ? {
@@ -270,6 +366,7 @@ const SearchBar = () => {
               id: crypto.randomUUID(),
               name: c.name,
               ref: { tag: c.tag, html: '', selector: c.selector },
+              extract: c.extract,
             })),
           ],
         }
@@ -282,7 +379,7 @@ const SearchBar = () => {
     if (!naming || !nameInput.trim()) return
     setDraftConfig(prev =>
       prev.category === 'list'
-        ? { ...prev, fields: [...prev.fields, { id: crypto.randomUUID(), name: nameInput.trim(), ref: naming }] }
+        ? { ...prev, fields: [...prev.fields, { id: crypto.randomUUID(), name: nameInput.trim(), ref: naming.ref, extract: naming.extract }] }
         : prev
     )
     setNaming(null)
@@ -402,8 +499,14 @@ const SearchBar = () => {
           draftConfig={draftConfig}
           setDraftConfig={setDraftConfig}
           pickTarget={pickTarget}
-          onStartPickMain={() => setPickTarget(p => p === 'main' ? null : 'main')}
-          onStartPickField={() => setPickTarget(p => p === 'field' ? null : 'field')}
+          onStartPickMain={() => { setLayerPick(null); setPickTarget(p => p === 'main' ? null : 'main') }}
+          onStartPickField={() => { setLayerPick(null); setPickTarget(p => p === 'field' ? null : 'field') }}
+          layerPick={layerPick}
+          onLayerSelectLevel={layerSelectLevel}
+          onLayerDescend={layerDescend}
+          onLayerExtractChange={layerExtractChange}
+          onLayerConfirm={layerConfirm}
+          onLayerCancel={layerCancel}
           naming={naming}
           nameInput={nameInput}
           setNameInput={setNameInput}

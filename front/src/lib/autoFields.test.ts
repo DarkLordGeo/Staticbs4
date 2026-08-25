@@ -41,11 +41,30 @@ describe('detectFields', () => {
         expect(candidates.some(c => c.tag === 'p' && c.preview === '£10')).toBe(true)
     })
 
-    it('skips elements with no text', () => {
+    it('skips elements with no text and no attributes worth extracting', () => {
         setBody('<div class="card"><span></span><span>Hi</span></div>')
         const candidates = detectFields(document.querySelector('.card')!)
         expect(candidates).toHaveLength(1)
         expect(candidates[0].preview).toBe('Hi')
+    })
+
+    it('finds an <img> with no text, defaulting to its src attribute', () => {
+        setBody('<div class="card"><a href="/p/1"><img class="thumb" src="/a.jpg"></a><span>Widget</span></div>')
+        const candidates = detectFields(document.querySelector('.card')!)
+        const img = candidates.find(c => c.tag === 'img')
+        expect(img).toBeDefined()
+        expect(img!.extract).toEqual({ kind: 'attr', name: 'src' })
+        expect(img!.preview).toBe('src="/a.jpg"')
+    })
+
+    it('descends a textless table cell to its inner <img>', () => {
+        setBody('<table><tbody><tr><td><img src="/thumb.png"></td><td>Alice</td></tr></tbody></table>')
+        const row = document.querySelector('tr')!
+        const candidates = detectFields(row)
+        expect(candidates).toHaveLength(2)
+        expect(candidates[0].tag).toBe('img')
+        expect(candidates[0].extract).toEqual({ kind: 'attr', name: 'src' })
+        expect(candidates[1].tag).toBe('td')
     })
 
     it('names candidates from a distinguishing class, falling back to the tag', () => {

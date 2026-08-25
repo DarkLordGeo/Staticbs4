@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { ElementRef, FnCategory, FnConfig, FnGroup } from '../types/builder'
+import type { ElementRef, ExtractMode, FnCategory, FnConfig, FnGroup } from '../types/builder'
 import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder'
 import { generatePythonCode } from '../lib/codegen'
 import type { ExtractionResult } from '../lib/extract'
 import type { FieldCandidate } from '../lib/autoFields'
 import { suggestUrlTemplate } from '../lib/urlPattern'
+import ElementLayerPicker from './ElementLayerPicker'
 
 const truncateHtml = (html: string, max = 50) =>
     html.length > max ? html.slice(0, max) + '…' : html
@@ -58,7 +59,7 @@ const DetectedFieldsPicker = ({
     onAdd,
 }: {
     candidates: FieldCandidate[]
-    onAdd: (selected: { tag: string; selector: string; name: string }[]) => void
+    onAdd: (selected: { tag: string; selector: string; name: string; extract: ExtractMode }[]) => void
 }) => {
     const [entries, setEntries] = useState<DetectedEntry[]>(
         () => candidates.map(c => ({ ...c, checked: true, name: c.suggestedName }))
@@ -78,6 +79,9 @@ const DetectedFieldsPicker = ({
                     <label key={i} className='flex items-center gap-2 text-xs'>
                         <input type='checkbox' checked={e.checked} onChange={() => toggle(i)} className='accent-[#22a55e] shrink-0' />
                         <span className='px-1 py-0.5 rounded bg-[#dcf3e4] text-[#166534] font-mono border border-[#b8e2c6] shrink-0'>{e.tag}</span>
+                        {e.extract.kind === 'attr' && (
+                            <span className='px-1 py-0.5 rounded bg-[#e0e7ff] text-[#3730a3] font-mono border border-[#c7d2fe] shrink-0'>attr:{e.extract.name}</span>
+                        )}
                         <input
                             value={e.name}
                             onChange={(ev) => rename(i, ev.target.value)}
@@ -88,7 +92,7 @@ const DetectedFieldsPicker = ({
                 ))}
             </div>
             <button
-                onClick={() => onAdd(selected.map(e => ({ tag: e.tag, selector: e.selector, name: e.name.trim() || e.suggestedName })))}
+                onClick={() => onAdd(selected.map(e => ({ tag: e.tag, selector: e.selector, name: e.name.trim() || e.suggestedName, extract: e.extract })))}
                 disabled={selected.length === 0}
                 className={`px-3 py-1.5 ${glossyGreenButtonClass}`}
             >
@@ -131,7 +135,7 @@ interface Props {
     sourceUrl: string
     groupMatchCount: number | null
     detectedFields: FieldCandidate[] | null
-    onAddDetectedFields: (selected: { tag: string; selector: string; name: string }[]) => void
+    onAddDetectedFields: (selected: { tag: string; selector: string; name: string; extract: ExtractMode }[]) => void
     repeatHint: number | null
     draftName: string
     setDraftName: (v: string) => void
@@ -142,7 +146,13 @@ interface Props {
     pickTarget: 'main' | 'field' | null
     onStartPickMain: () => void
     onStartPickField: () => void
-    naming: ElementRef | null
+    layerPick: { chain: Element[]; extract: ExtractMode | null } | null
+    onLayerSelectLevel: (index: number) => void
+    onLayerDescend: (child: Element) => void
+    onLayerExtractChange: (mode: ExtractMode) => void
+    onLayerConfirm: () => void
+    onLayerCancel: () => void
+    naming: { ref: ElementRef; extract: ExtractMode } | null
     nameInput: string
     setNameInput: (v: string) => void
     onConfirmField: () => void
@@ -166,6 +176,7 @@ const FunctionBuilderPanel = ({
     draftCategory, onCategoryChange,
     draftConfig, setDraftConfig,
     pickTarget, onStartPickMain, onStartPickField,
+    layerPick, onLayerSelectLevel, onLayerDescend, onLayerExtractChange, onLayerConfirm, onLayerCancel,
     naming, nameInput, setNameInput, onConfirmField, onCancelNaming, onRemoveField,
     canCreate, onCreate,
     functions, onDeleteFunction, onClearAll,
@@ -243,6 +254,18 @@ const FunctionBuilderPanel = ({
                         ))}
                     </select>
                 </div>
+
+                {layerPick && (
+                    <ElementLayerPicker
+                        chain={layerPick.chain}
+                        extract={layerPick.extract}
+                        onSelectLevel={onLayerSelectLevel}
+                        onDescend={onLayerDescend}
+                        onExtractChange={onLayerExtractChange}
+                        onConfirm={onLayerConfirm}
+                        onCancel={onLayerCancel}
+                    />
+                )}
 
                 {/* Pagination has two independent strategies — pick the mode before
                     anything else, since it decides whether there's even an element
@@ -357,19 +380,33 @@ const FunctionBuilderPanel = ({
                     </div>
                 )}
 
-                {/* Category-specific extra options */}
-                {draftConfig.category === 'text' && (
+                {/* Category-specific extra options. The layer picker above already
+                    offers this choice at pick time — this is the "change your mind
+                    afterward without re-picking" path, reading candidate attribute
+                    names back out of the target's stored outerHTML. */}
+                {(draftConfig.category === 'text' || draftConfig.category === 'header') && (
                     <div className='flex flex-col gap-1'>
                         <label className='text-xs text-gray-500'>Extract</label>
                         <select
-                            value={draftConfig.mode}
-                            onChange={(e) => setDraftConfig(prev =>
-                                prev.category === 'text' ? { ...prev, mode: e.target.value as 'text' | 'html' } : prev
-                            )}
+                            value={draftConfig.extract.kind === 'attr' ? `attr:${draftConfig.extract.name}` : draftConfig.extract.kind}
+                            onChange={(e) => setDraftConfig(prev => {
+                                if (prev.category !== 'text' && prev.category !== 'header') return prev
+                                const v = e.target.value
+                                const extract: ExtractMode = v.startsWith('attr:')
+                                    ? { kind: 'attr', name: v.slice('attr:'.length) }
+                                    : { kind: v as 'text' | 'html' }
+                                return { ...prev, extract }
+                            })}
                             className={inputClass}
                         >
                             <option value='text'>Text only</option>
                             <option value='html'>Inner HTML</option>
+                            {attributesFromHtml(mainTargetOf(draftConfig)?.html ?? '').map(name => (
+                                <option key={name} value={`attr:${name}`}>Attribute: {name}</option>
+                            ))}
+                            {draftConfig.extract.kind === 'attr' && !attributesFromHtml(mainTargetOf(draftConfig)?.html ?? '').includes(draftConfig.extract.name) && (
+                                <option value={`attr:${draftConfig.extract.name}`}>Attribute: {draftConfig.extract.name}</option>
+                            )}
                         </select>
                     </div>
                 )}
@@ -437,7 +474,7 @@ const FunctionBuilderPanel = ({
 
                 {naming && (
                     <div className='flex items-center gap-2 mt-1'>
-                        <span className='text-xs text-gray-500'>Name this &lt;{naming.tag}&gt; field:</span>
+                        <span className='text-xs text-gray-500'>Name this &lt;{naming.ref.tag}&gt; field:</span>
                         <input
                             value={nameInput}
                             onChange={(e) => setNameInput(e.target.value)}
@@ -606,6 +643,20 @@ function mainTargetOf(config: FnConfig): ElementRef | null {
         case 'list': return config.item
         case 'table': return config.table
         case 'pagination': return config.mode === 'link' ? config.next : null
+    }
+}
+
+// Recovers attribute names from a target's stored outerHTML, for the
+// post-hoc "Extract" dropdown — the target itself is long gone (it lived in
+// the iframe's now-possibly-reloaded document), but its full outerHTML was
+// captured at pick time and survives in the ElementRef.
+function attributesFromHtml(html: string): string[] {
+    if (!html) return []
+    try {
+        const el = new DOMParser().parseFromString(html, 'text/html').body.firstElementChild
+        return el ? Array.from(el.attributes).map(a => a.name) : []
+    } catch {
+        return []
     }
 }
 

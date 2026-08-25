@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { generatePythonCode } from './codegen'
-import type { ElementRef, FnGroup } from '../types/builder'
+import type { ElementRef, FnConfig, FnGroup, ListField } from '../types/builder'
 
 const ref = (selector: string, tag = 'div'): ElementRef => ({ tag, html: `<${tag}></${tag}>`, selector })
+const header = (target: ElementRef | null): FnConfig => ({ category: 'header', target, extract: { kind: 'text' } })
+const field = (name: string, fieldRef: ElementRef): ListField => ({ id: name, name, ref: fieldRef, extract: { kind: 'text' } })
 
 describe('generatePythonCode', () => {
     it('returns a placeholder comment when there are no functions', () => {
@@ -13,7 +15,7 @@ describe('generatePythonCode', () => {
 
     it('generates a header function and a single-page main', () => {
         const functions: FnGroup[] = [
-            { id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } },
+            { id: '1', name: 'get_title', config: header(ref('h1')) },
         ]
         const code = generatePythonCode(functions, 'https://example.com')
         expect(code).toContain('def get_title(soup):')
@@ -24,8 +26,8 @@ describe('generatePythonCode', () => {
 
     it('sanitizes and deduplicates function names', () => {
         const functions: FnGroup[] = [
-            { id: '1', name: 'Get Title!', config: { category: 'header', target: ref('h1') } },
-            { id: '2', name: 'Get Title!', config: { category: 'header', target: ref('h2') } },
+            { id: '1', name: 'Get Title!', config: header(ref('h1')) },
+            { id: '2', name: 'Get Title!', config: header(ref('h2')) },
         ]
         const code = generatePythonCode(functions, 'https://example.com')
         expect(code).toContain('def Get_Title_(soup):')
@@ -34,7 +36,7 @@ describe('generatePythonCode', () => {
 
     it('marks an incomplete function (no element picked) without crashing', () => {
         const functions: FnGroup[] = [
-            { id: '1', name: 'get_title', config: { category: 'header', target: null } },
+            { id: '1', name: 'get_title', config: header(null) },
         ]
         expect(generatePythonCode(functions, 'https://example.com')).toContain('incomplete')
     })
@@ -46,7 +48,7 @@ describe('generatePythonCode', () => {
             config: {
                 category: 'list',
                 item: ref('tr'),
-                fields: [{ id: 'f1', name: 'title', ref: ref('td', 'td') }],
+                fields: [field('title', ref('td', 'td'))],
             },
         }]
         const code = generatePythonCode(functions, 'https://example.com')
@@ -115,7 +117,7 @@ describe('generatePythonCode', () => {
     })
 
     it('adds no JSON/XLSX code when export options are omitted', () => {
-        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
         const code = generatePythonCode(functions, 'https://example.com')
         expect(code).not.toContain('import json')
         expect(code).not.toContain('openpyxl')
@@ -124,7 +126,7 @@ describe('generatePythonCode', () => {
     })
 
     it('writes results.json in single-page mode when json export is enabled', () => {
-        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
         const code = generatePythonCode(functions, 'https://example.com', { json: true })
         expect(code).toContain('import json')
         expect(code).toContain('results = {')
@@ -134,12 +136,32 @@ describe('generatePythonCode', () => {
     })
 
     it('writes results.xlsx via openpyxl when xlsx export is enabled, and updates the pip install line', () => {
-        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: { category: 'header', target: ref('h1') } }]
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
         const code = generatePythonCode(functions, 'https://example.com', { xlsx: true })
         expect(code).toContain('# pip install requests beautifulsoup4 html5lib openpyxl')
         expect(code).toContain('from openpyxl import Workbook')
         expect(code).toContain('workbook.save("results.xlsx")')
         expect(code).not.toContain('import json')
+    })
+
+    it('generates attribute extraction for a header target and a list field — e.g. img src, a href', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_logo', config: { category: 'header', target: ref('img.logo', 'img'), extract: { kind: 'attr', name: 'src' } } },
+            {
+                id: '2', name: 'get_items', config: {
+                    category: 'list',
+                    item: ref('li'),
+                    fields: [
+                        { id: 'f1', name: 'href', ref: ref('a', 'a'), extract: { kind: 'attr', name: 'href' } },
+                        { id: 'f2', name: 'raw', ref: ref('div.raw', 'div'), extract: { kind: 'html' } },
+                    ],
+                },
+            },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com')
+        expect(code).toContain('el.get("src") if el else None')
+        expect(code).toContain('entry["href"] = href.get("href") if href else None')
+        expect(code).toContain('entry["raw"] = raw.decode_contents() if raw else None')
     })
 
     it('supports both export formats together in crawl mode, keyed by the results dict', () => {

@@ -5,13 +5,24 @@
 // reproduces, so what you see here should closely match what the script
 // returns when it actually runs.
 
-import type { FnConfig, FnGroup } from '../types/builder'
+import type { ExtractMode, FnConfig, FnGroup } from '../types/builder'
 
 export type ExtractionResult =
     | { ok: true; value: unknown }
     | { ok: false; error: string }
 
 const textOf = (el: Element): string => (el.textContent ?? '').trim()
+
+// Mirrors codegen.ts's genExtractExpr — same three shapes, against a real
+// DOM element instead of a BeautifulSoup Tag. Exported for the layer picker,
+// which shows a live preview of whatever the current extract mode yields.
+export const applyExtract = (el: Element, extract: ExtractMode): string | null => {
+    switch (extract.kind) {
+        case 'text': return textOf(el)
+        case 'html': return el.innerHTML
+        case 'attr': return el.getAttribute(extract.name)
+    }
+}
 
 const extractOne = (doc: Document, config: FnConfig): unknown => {
     switch (config.category) {
@@ -20,8 +31,7 @@ const extractOne = (doc: Document, config: FnConfig): unknown => {
             if (!config.target) throw new Error('no target element selected')
             const el = doc.querySelector(config.target.selector)
             if (!el) return null
-            if (config.category === 'text' && config.mode === 'html') return el.innerHTML
-            return textOf(el)
+            return applyExtract(el, config.extract)
         }
 
         case 'links': {
@@ -46,7 +56,7 @@ const extractOne = (doc: Document, config: FnConfig): unknown => {
                 for (const f of config.fields) {
                     if (!f.ref.selector) { entry[f.name] = null; continue }
                     const fieldEl = item.querySelector(f.ref.selector)
-                    entry[f.name] = fieldEl ? textOf(fieldEl) : null
+                    entry[f.name] = fieldEl ? applyExtract(fieldEl, f.extract) : null
                 }
                 return entry
             })

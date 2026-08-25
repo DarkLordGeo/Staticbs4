@@ -2,7 +2,7 @@
 // BeautifulSoup script — the "get back working BeautifulSoup code" promise
 // from the landing page.
 
-import type { FnConfig, FnGroup } from '../types/builder'
+import type { ExtractMode, FnConfig, FnGroup } from '../types/builder'
 
 // Which extra output formats to write alongside the printed results —
 // both default off so existing generated code (and its tests) is unchanged.
@@ -11,7 +11,7 @@ export interface ExportOptions {
     xlsx?: boolean
 }
 
-const pyStr = (s: string): string => JSON.stringify(s)
+export const pyStr = (s: string): string => JSON.stringify(s)
 
 // A valid, readable Python identifier from a free-text function name.
 const pySafeName = (name: string): string => {
@@ -49,6 +49,18 @@ const selectorFor = (config: FnConfig): string | null => {
 const indent = (lines: string[], level = 1): string[] =>
     lines.map(l => (l ? '    '.repeat(level) + l : l))
 
+// A picked element can be read as its text, its inner HTML, or one specific
+// attribute (an <img>'s src, a data-* attribute, ...) — shared by the
+// single-target categories (header/text) and each list field below, so the
+// three extraction shapes are only written once.
+const genExtractExpr = (varName: string, extract: ExtractMode): string => {
+    switch (extract.kind) {
+        case 'text': return `${varName}.get_text(strip=True) if ${varName} else None`
+        case 'html': return `${varName}.decode_contents() if ${varName} else None`
+        case 'attr': return `${varName}.get(${pyStr(extract.name)}) if ${varName} else None`
+    }
+}
+
 const genFunction = (name: string, config: FnConfig): string => {
     // Checked before the generic "no selector => incomplete" guard below:
     // url_pattern pagination deliberately has no selector at all (it's not
@@ -64,22 +76,12 @@ const genFunction = (name: string, config: FnConfig): string => {
 
     switch (config.category) {
         case 'header':
-            return [
-                `def ${name}(soup):`,
-                ...indent([
-                    `el = soup.select_one(${pyStr(selector)})`,
-                    `return el.get_text(strip=True) if el else None`,
-                ]),
-            ].join('\n')
-
         case 'text':
             return [
                 `def ${name}(soup):`,
                 ...indent([
                     `el = soup.select_one(${pyStr(selector)})`,
-                    config.mode === 'html'
-                        ? `return el.decode_contents() if el else None`
-                        : `return el.get_text(strip=True) if el else None`,
+                    `return ${genExtractExpr('el', config.extract)}`,
                 ]),
             ].join('\n')
 
@@ -113,7 +115,7 @@ const genFunction = (name: string, config: FnConfig): string => {
                         continue
                     }
                     body.push(`    ${varName} = item.select_one(${pyStr(f.ref.selector)})`)
-                    body.push(`    entry[${pyStr(f.name)}] = ${varName}.get_text(strip=True) if ${varName} else None`)
+                    body.push(`    entry[${pyStr(f.name)}] = ${genExtractExpr(varName, f.extract)}`)
                 }
                 body.push('    results.append(entry)')
             }
@@ -308,6 +310,18 @@ const genCrawlMain = (
     ].join('\n')
 
     return [listFunctionsBlock, crawlDef, main].join('\n\n\n')
+}
+
+// Just the imports/fetch_soup/def blocks, no __main__ — the reusable core
+// that both the standalone script (below) and the generated REST API
+// service's scraper.py embed, so extraction logic is never duplicated.
+export const generateScraperModule = (functions: FnGroup[], sourceUrl: string): { code: string; names: Map<string, string> } => {
+    const names = uniqueNames(functions)
+    const preamble = genPreamble(sourceUrl, false, {})
+    if (functions.length === 0) return { code: preamble + '\n', names }
+
+    const body = functions.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
+    return { code: [preamble, body].join('\n\n\n') + '\n', names }
 }
 
 export const generatePythonCode = (functions: FnGroup[], sourceUrl: string, exportOptions: ExportOptions = {}): string => {
