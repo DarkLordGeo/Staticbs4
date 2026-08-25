@@ -392,24 +392,70 @@ const SearchBar = () => {
     )
   }
 
-  const createFunction = () => {
-    if (!draftName.trim() || !isConfigComplete(draftConfig)) return
-    setFunctions(prev => [...prev, { id: crypto.randomUUID(), name: draftName.trim(), config: draftConfig }])
+  // Set while an existing function is loaded back into the builder for
+  // editing — null means "Create function" appends a new one; set means
+  // "Update function" replaces that id in place instead.
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const resetDraft = () => {
+    setEditingId(null)
     setDraftName("")
     setDraftCategory('header')
     setDraftConfig(emptyConfigFor('header'))
     setPickTarget(null)
+    setLayerPick(null)
+    setNaming(null)
+    setDetectedFields(null)
+    setRepeatHint(null)
+  }
+
+  const saveFunction = () => {
+    if (!draftName.trim() || !isConfigComplete(draftConfig)) return
+    if (editingId) {
+      setFunctions(prev => prev.map(fn => (fn.id === editingId ? { ...fn, name: draftName.trim(), config: draftConfig } : fn)))
+    } else {
+      setFunctions(prev => [...prev, { id: crypto.randomUUID(), name: draftName.trim(), config: draftConfig }])
+    }
+    resetDraft()
+  }
+
+  // Loads an existing function's name/category/config back into the builder
+  // form above, so fixing a mistake (wrong field, wrong extract mode, a
+  // selector that no longer matches after the site changed) doesn't mean
+  // deleting it and picking everything again from scratch.
+  const startEdit = (fn: FnGroup) => {
+    setEditingId(fn.id)
+    setDraftName(fn.name)
+    setDraftCategory(fn.config.category)
+    setDraftConfig(fn.config)
+    setPickTarget(null)
+    setLayerPick(null)
+    setNaming(null)
     setDetectedFields(null)
     setRepeatHint(null)
   }
 
   const deleteFunction = (id: string) => {
     setFunctions(prev => prev.filter(fn => fn.id !== id))
+    if (editingId === id) resetDraft() // was mid-edit on the thing just deleted
+  }
+
+  const reorderFunctions = (fromId: string, toId: string) => {
+    if (fromId === toId) return
+    setFunctions(prev => {
+      const fromIndex = prev.findIndex(fn => fn.id === fromId)
+      const toIndex = prev.findIndex(fn => fn.id === toId)
+      if (fromIndex === -1 || toIndex === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
   }
 
   // Just empties functions — the autosave effect above persists that change
   // right away, so there's no separate localStorage-clearing step needed.
-  const clearAllFunctions = () => setFunctions([])
+  const clearAllFunctions = () => { setFunctions([]); resetDraft() }
 
   const canCreate = draftName.trim().length > 0 && isConfigComplete(draftConfig)
 
@@ -514,7 +560,11 @@ const SearchBar = () => {
           onCancelNaming={() => setNaming(null)}
           onRemoveField={removeField}
           canCreate={canCreate}
-          onCreate={createFunction}
+          onCreate={saveFunction}
+          editingId={editingId}
+          onEditFunction={startEdit}
+          onCancelEdit={resetDraft}
+          onReorderFunctions={reorderFunctions}
           functions={functions}
           onDeleteFunction={deleteFunction}
           onClearAll={clearAllFunctions}

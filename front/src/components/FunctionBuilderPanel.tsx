@@ -102,6 +102,58 @@ const DetectedFieldsPicker = ({
     )
 }
 
+// The created-functions list — reorderable via native HTML5 drag-and-drop
+// (no extra dependency needed for something this simple), and each entry
+// opens back into the builder above for editing instead of only ever being
+// delete-and-recreate.
+const FunctionList = ({
+    functions, editingId, onEditFunction, onDeleteFunction, onReorderFunctions,
+}: {
+    functions: FnGroup[]
+    editingId: string | null
+    onEditFunction: (fn: FnGroup) => void
+    onDeleteFunction: (id: string) => void
+    onReorderFunctions: (fromId: string, toId: string) => void
+}) => {
+    const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+    return (
+        <>
+            {functions.map(fn => (
+                <div
+                    key={fn.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('text/plain', fn.id)}
+                    onDragOver={e => { e.preventDefault(); setDragOverId(fn.id) }}
+                    onDragLeave={() => setDragOverId(prev => (prev === fn.id ? null : prev))}
+                    onDrop={e => {
+                        e.preventDefault()
+                        setDragOverId(null)
+                        const fromId = e.dataTransfer.getData('text/plain')
+                        if (fromId) onReorderFunctions(fromId, fn.id)
+                    }}
+                    className={`
+                        rounded-xl p-2.5 cursor-grab active:cursor-grabbing
+                        bg-[linear-gradient(180deg,#f7f9f7_0%,#eaeeeb_100%)]
+                        border shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(0,0,0,0.08)]
+                        ${fn.id === editingId ? 'border-[#2f9e5c] ring-1 ring-[#2f9e5c]' : 'border-[#c3c9c4]'}
+                        ${dragOverId === fn.id ? 'border-dashed border-2 border-[#2f9e5c]' : ''}
+                    `}
+                >
+                    <div className='flex items-center gap-2'>
+                        <span className='text-gray-400 select-none' title='Drag to reorder'>⠿</span>
+                        <span className='font-mono font-semibold'>{fn.name}()</span>
+                        <span className='text-xs px-1.5 py-0.5 rounded-full bg-[#dcf3e4] text-[#166534] border border-[#b8e2c6]'>{CATEGORY_LABELS[fn.config.category]}</span>
+                        <button onClick={() => onEditFunction(fn)} className='ml-auto text-gray-400 hover:text-[#2f9e5c] text-xs'>edit</button>
+                        <button onClick={() => onDeleteFunction(fn.id)} className='text-gray-400 hover:text-red-500 text-xs'>delete</button>
+                    </div>
+                    <div className='text-xs text-gray-500 mt-1'>{summarizeFn(fn)}</div>
+                </div>
+            ))}
+        </>
+    )
+}
+
 const PickButton = ({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) => (
     <button
         onClick={onClick}
@@ -160,6 +212,10 @@ interface Props {
     onRemoveField: (id: string) => void
     canCreate: boolean
     onCreate: () => void
+    editingId: string | null
+    onEditFunction: (fn: FnGroup) => void
+    onCancelEdit: () => void
+    onReorderFunctions: (fromId: string, toId: string) => void
     functions: FnGroup[]
     onDeleteFunction: (id: string) => void
     onClearAll: () => void
@@ -179,6 +235,7 @@ const FunctionBuilderPanel = ({
     layerPick, onLayerSelectLevel, onLayerDescend, onLayerExtractChange, onLayerConfirm, onLayerCancel,
     naming, nameInput, setNameInput, onConfirmField, onCancelNaming, onRemoveField,
     canCreate, onCreate,
+    editingId, onEditFunction, onCancelEdit, onReorderFunctions,
     functions, onDeleteFunction, onClearAll,
     canRun, onRun, extractionResult,
 }: Props) => {
@@ -486,13 +543,18 @@ const FunctionBuilderPanel = ({
                     </div>
                 )}
 
-                <button
-                    onClick={onCreate}
-                    disabled={!canCreate}
-                    className={`mt-1 px-3 py-1.5 ${glossyGreenButtonClass}`}
-                >
-                    Create function
-                </button>
+                <div className='flex items-center gap-2 mt-1'>
+                    <button
+                        onClick={onCreate}
+                        disabled={!canCreate}
+                        className={`px-3 py-1.5 ${glossyGreenButtonClass}`}
+                    >
+                        {editingId ? 'Update function' : 'Create function'}
+                    </button>
+                    {editingId && (
+                        <button onClick={onCancelEdit} className='text-xs text-gray-400 hover:text-gray-600'>Cancel edit</button>
+                    )}
+                </div>
             </div>
 
             {functions.length > 0 && (
@@ -501,24 +563,14 @@ const FunctionBuilderPanel = ({
                         <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Functions</div>
                         <button onClick={onClearAll} className='text-xs text-gray-400 hover:text-red-500'>Clear all</button>
                     </div>
-                    {functions.map(fn => (
-                        <div
-                            key={fn.id}
-                            className='
-                                rounded-xl p-2.5
-                                bg-[linear-gradient(180deg,#f7f9f7_0%,#eaeeeb_100%)]
-                                border border-[#c3c9c4]
-                                shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(0,0,0,0.08)]
-                            '
-                        >
-                            <div className='flex items-center gap-2'>
-                                <span className='font-mono font-semibold'>{fn.name}()</span>
-                                <span className='text-xs px-1.5 py-0.5 rounded-full bg-[#dcf3e4] text-[#166534] border border-[#b8e2c6]'>{CATEGORY_LABELS[fn.config.category]}</span>
-                                <button onClick={() => onDeleteFunction(fn.id)} className='ml-auto text-gray-400 hover:text-red-500 text-xs'>delete</button>
-                            </div>
-                            <div className='text-xs text-gray-500 mt-1'>{summarizeFn(fn)}</div>
-                        </div>
-                    ))}
+                    <p className='text-[10px] text-gray-400 -mt-1'>Drag ⠿ to reorder — generated code and crawl order follow this list.</p>
+                    <FunctionList
+                        functions={functions}
+                        editingId={editingId}
+                        onEditFunction={onEditFunction}
+                        onDeleteFunction={onDeleteFunction}
+                        onReorderFunctions={onReorderFunctions}
+                    />
                 </div>
             )}
 
