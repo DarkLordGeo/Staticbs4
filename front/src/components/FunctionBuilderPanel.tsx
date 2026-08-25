@@ -38,6 +38,16 @@ const glossyGreenButtonClass = `
     disabled:opacity-40 disabled:cursor-not-allowed
 `
 
+// A small secondary action (edit, delete, cancel, clear) — a real button
+// with a visible hit target and hover feedback, not a bare text link, but
+// deliberately quieter than glossyGreenButtonClass since these aren't the
+// primary action in whatever row they sit in.
+const pillButtonClass = (tone: 'neutral' | 'danger' = 'neutral') => `
+    text-xs font-semibold px-2 py-0.5 rounded-full border transition-colors
+    border-transparent text-gray-500
+    ${tone === 'danger' ? 'hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'hover:bg-[#e7f4ec] hover:text-[#1f6b3f] hover:border-[#bfe0cc]'}
+`
+
 const ElementPreview = ({ el }: { el: ElementRef }) => (
     <div className='mt-1 flex flex-col gap-0.5 text-xs'>
         <div className='flex items-center gap-1.5'>
@@ -75,7 +85,7 @@ const DetectedFieldsPicker = ({
             <p className='text-xs text-gray-500'>
                 Detected {entries.length} possible field{entries.length === 1 ? '' : 's'} — uncheck any you don't want, rename the rest:
             </p>
-            <div className='flex flex-col gap-1.5 max-h-56 overflow-y-auto'>
+            <div className='flex flex-col gap-1.5 max-h-56 overflow-y-auto styled-scrollbar'>
                 {entries.map((e, i) => (
                     <label key={i} className='flex items-center gap-2 text-xs'>
                         <input type='checkbox' checked={e.checked} onChange={() => toggle(i)} className='accent-[#22a55e] shrink-0' />
@@ -145,8 +155,8 @@ const FunctionList = ({
                         <span className='text-gray-400 select-none' title='Drag to reorder'>⠿</span>
                         <span className='font-mono font-semibold'>{fn.name}()</span>
                         <span className='text-xs px-1.5 py-0.5 rounded-full bg-[#dcf3e4] text-[#166534] border border-[#b8e2c6]'>{CATEGORY_LABELS[fn.config.category]}</span>
-                        <button onClick={() => onEditFunction(fn)} className='ml-auto text-gray-400 hover:text-[#2f9e5c] text-xs'>edit</button>
-                        <button onClick={() => onDeleteFunction(fn.id)} className='text-gray-400 hover:text-red-500 text-xs'>delete</button>
+                        <button onClick={() => onEditFunction(fn)} className={`ml-auto ${pillButtonClass()}`}>edit</button>
+                        <button onClick={() => onDeleteFunction(fn.id)} className={pillButtonClass('danger')}>delete</button>
                     </div>
                     <div className='text-xs text-gray-500 mt-1'>{summarizeFn(fn)}</div>
                 </div>
@@ -573,7 +583,7 @@ const FunctionBuilderPanel = ({
                             autoFocus
                         />
                         <button onClick={onConfirmField} className={`px-2 py-1 ${glossyGreenButtonClass}`}>Add</button>
-                        <button onClick={onCancelNaming} className='text-xs text-gray-400'>Cancel</button>
+                        <button onClick={onCancelNaming} className={pillButtonClass()}>Cancel</button>
                     </div>
                 )}
 
@@ -586,7 +596,7 @@ const FunctionBuilderPanel = ({
                         {editingId ? 'Update function' : 'Create function'}
                     </button>
                     {editingId && (
-                        <button onClick={onCancelEdit} className='text-xs text-gray-400 hover:text-gray-600'>Cancel edit</button>
+                        <button onClick={onCancelEdit} className={pillButtonClass()}>Cancel edit</button>
                     )}
                 </div>
             </div>
@@ -595,7 +605,7 @@ const FunctionBuilderPanel = ({
                 <div className='mt-4 flex flex-col gap-2'>
                     <div className='flex items-center justify-between'>
                         <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Functions</div>
-                        <button onClick={onClearAll} className='text-xs text-gray-400 hover:text-red-500'>Clear all</button>
+                        <button onClick={onClearAll} className={pillButtonClass('danger')}>Clear all</button>
                     </div>
                     <p className='text-[10px] text-gray-400 -mt-1'>Drag ⠿ to reorder — generated code and crawl order follow this list.</p>
                     <FunctionList
@@ -626,7 +636,7 @@ const FunctionBuilderPanel = ({
                         </p>
                     )}
                     {extractionResult && (
-                        <div className='flex flex-col gap-2 max-h-72 overflow-y-auto'>
+                        <div className='flex flex-col gap-2 max-h-72 overflow-y-auto styled-scrollbar'>
                             {functions.map(fn => {
                                 const result = extractionResult[fn.name]
                                 if (!result) return null
@@ -695,7 +705,7 @@ const FunctionBuilderPanel = ({
                     <pre
                         className='
                             font-mono text-[11px] leading-relaxed text-[#9be8ab] whitespace-pre-wrap wrap-break-word
-                            rounded-xl p-3 max-h-72 overflow-y-auto
+                            rounded-xl p-3 max-h-72 overflow-y-auto styled-scrollbar-dark
                             bg-[linear-gradient(180deg,#1e2b23_0%,#0f1811_100%)]
                             border border-[#1f3a28]
                             shadow-[inset_0_1px_3px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.15)]

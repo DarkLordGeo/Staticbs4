@@ -461,7 +461,7 @@ const SearchBar = () => {
 
   return (
     <div className='flex flex-row items-start justify-start w-full'>
-      <div className='w-2/3 py-6 pr-6'>
+      <div className='w-3/5 py-6 pr-6'>
         <div className='flex items-center gap-3 mb-4'>
           <input
             value={url}
@@ -528,7 +528,7 @@ const SearchBar = () => {
         down to pick something further down the page. Sticky + its own
         scroll keeps "Build a Function" reachable without scrolling back up.
       */}
-      <div className='w-1/3 sticky top-4 max-h-screen overflow-y-auto flex items-start justify-start flex-col'>
+      <div className='w-2/5 sticky top-4 max-h-screen overflow-y-auto styled-scrollbar flex items-start justify-start flex-col'>
         <FunctionBuilderPanel
           sourceUrl={url}
           groupMatchCount={groupMatchCount}

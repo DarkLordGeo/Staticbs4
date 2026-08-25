@@ -4,3 +4,48 @@
   --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
+
+/* Thin, green-tinted scrollbars matching the app's palette instead of the
+   browser default — applied wherever the layout scrolls internally (the
+   sticky builder panel, the generated-code block). Firefox uses the
+   `scrollbar-*` properties; everything else uses the ::-webkit- pseudo. */
+.styled-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #7fae8f #e7ebe8;
+}
+.styled-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.styled-scrollbar::-webkit-scrollbar-track {
+  background: #e7ebe8;
+  border-radius: 999px;
+}
+.styled-scrollbar::-webkit-scrollbar-thumb {
+  background: #7fae8f;
+  border-radius: 999px;
+}
+.styled-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #5f9878;
+}
+
+/* Same idea, tuned for the dark generated-code panel. */
+.styled-scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: #3a5c46 #16211a;
+}
+.styled-scrollbar-dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.styled-scrollbar-dark::-webkit-scrollbar-track {
+  background: #16211a;
+  border-radius: 999px;
+}
+.styled-scrollbar-dark::-webkit-scrollbar-thumb {
+  background: #3a5c46;
+  border-radius: 999px;
+}
+.styled-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: #4f7a5e;
+}
