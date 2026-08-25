@@ -29,28 +29,39 @@ const Header = () => {
         </span>
       </Link>
 
-      <div
-        className="
-          flex items-center gap-2 px-2.5 py-1 rounded-full
-          bg-[linear-gradient(180deg,#1e2b23,#0f1811)]
-          border border-[#1f3a28]
-          shadow-[inset_0_1px_3px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.15)]
-        "
-      >
-        <span
+      <div className="flex items-center gap-4">
+        <Link
+          to="/docs"
           className="
-            w-2 h-2 rounded-full bg-[#4ade80]
-            shadow-[0_0_4px_1px_#4ade80,0_0_8px_2px_rgba(74,222,128,0.6),inset_0_-1px_1px_rgba(0,0,0,0.3)]
-          "
-        />
-        <span
-          className="
-            font-mono text-[10px] tracking-[0.08em] text-[#9be8ab]
-            [text-shadow:0_0_4px_rgba(74,222,128,0.5)]
+            font-sans font-semibold text-xs tracking-widest uppercase
+            text-[#4a4d54] hover:text-[#166534]
           "
         >
-          READY
-        </span>
+          Docs
+        </Link>
+        <div
+          className="
+            flex items-center gap-2 px-2.5 py-1 rounded-full
+            bg-[linear-gradient(180deg,#1e2b23,#0f1811)]
+            border border-[#1f3a28]
+            shadow-[inset_0_1px_3px_rgba(0,0,0,0.8),0_1px_0_rgba(255,255,255,0.15)]
+          "
+        >
+          <span
+            className="
+              w-2 h-2 rounded-full bg-[#4ade80]
+              shadow-[0_0_4px_1px_#4ade80,0_0_8px_2px_rgba(74,222,128,0.6),inset_0_-1px_1px_rgba(0,0,0,0.3)]
+            "
+          />
+          <span
+            className="
+              font-mono text-[10px] tracking-[0.08em] text-[#9be8ab]
+              [text-shadow:0_0_4px_rgba(74,222,128,0.5)]
+            "
+          >
+            READY
+          </span>
+        </div>
       </div>
     </div>
   )

@@ -67,6 +67,13 @@ const Landing = () => {
                 >
                     Launch Inspector
                 </Link>
+
+                <Link
+                    to="/docs"
+                    className="text-xs font-sans font-semibold tracking-widest uppercase text-[#54575e] hover:text-[#166534]"
+                >
+                    Read the docs
+                </Link>
             </div>
         </div>
     )

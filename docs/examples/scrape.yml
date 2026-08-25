@@ -1,0 +1,34 @@
+# Example GitHub Actions workflow for running a generated scraper.py on a
+# schedule. Copy this to .github/workflows/scrape.yml in whatever repo you
+# commit the generated script (and its requirements.txt) to, and adjust the
+# cron schedule / commit path as needed. Explained in more detail at /docs
+# in the app itself ("Automate on GitHub Actions").
+
+name: Scrape on a schedule
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # once a day, 06:00 UTC — adjust as needed
+  workflow_dispatch: {}    # lets you also trigger it manually from the Actions tab
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python scraper.py
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results.json
+          git diff --staged --quiet || git commit -m "Update scraped data"
+          git push

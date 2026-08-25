@@ -3,6 +3,7 @@ import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import HomeLayout from './Layouts/HomeLayout'
 import Landing from './pages/Landing'
+import Docs from './pages/Docs'
 
 function App() {
 
@@ -16,6 +17,7 @@ function App() {
             <SearchBar />
           </HomeLayout>
         } />
+        <Route path="/docs" element={<Docs />} />
 
       </Routes>
 

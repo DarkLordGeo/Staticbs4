@@ -6,6 +6,11 @@ Python script — no manual selector hunting.
 
 Docs site: https://darklordgeo.github.io/Staticbs4/
 
+The app itself also has an in-app `/docs` page — what each generated function's code is
+actually doing in BeautifulSoup terms, plus guides for scheduling a generated script on
+GitHub Actions ([example workflow](docs/examples/scrape.yml)) and deploying the generated
+REST API service to a cloud VM.
+
 |  |  |
 |---|---|
 | ![Landing page](docs/screenshots/landing.png) | ![Picking an element and getting Python back](docs/screenshots/workspace-basic.png) |
