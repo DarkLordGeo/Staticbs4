@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ElementRef, ExtractMode, FnCategory, FnConfig, FnGroup } from '../types/builder'
 import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder'
 import { generatePythonCode } from '../lib/codegen'
+import { canGenerateApiService, generateApiService } from '../lib/apiCodegen'
 import type { ExtractionResult } from '../lib/extract'
 import type { FieldCandidate } from '../lib/autoFields'
 import { suggestUrlTemplate } from '../lib/urlPattern'
@@ -263,21 +264,46 @@ const FunctionBuilderPanel = ({
         }
     }
 
+    const hostSlug = () => {
+        try {
+            return new URL(sourceUrl).hostname.replace(/[^a-zA-Z0-9]+/g, '_') || 'scraper'
+        } catch {
+            return 'scraper'
+        }
+    }
+
     const handleDownload = () => {
-        const filename = (() => {
-            try {
-                const host = new URL(sourceUrl).hostname.replace(/[^a-zA-Z0-9]+/g, '_')
-                return `${host || 'scraper'}.py`
-            } catch {
-                return 'scraper.py'
-            }
-        })()
         const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
         const a = document.createElement('a')
         a.href = blobUrl
-        a.download = filename
+        a.download = `${hostSlug()}.py`
         a.click()
         URL.revokeObjectURL(blobUrl)
+    }
+
+    const canApiService = canGenerateApiService(functions)
+    const [apiZipping, setApiZipping] = useState(false)
+    const handleDownloadApiService = async () => {
+        setApiZipping(true)
+        try {
+            // Lazy-loaded: jszip is only needed by this one button, so pulling
+            // it into the main bundle would cost every visitor for a feature
+            // most won't touch.
+            const { default: JSZip } = await import('jszip')
+            const files = generateApiService(functions, sourceUrl)
+            const zip = new JSZip()
+            const folder = zip.folder(`${hostSlug()}_api`)!
+            for (const [name, content] of Object.entries(files)) folder.file(name, content)
+            const blob = await zip.generateAsync({ type: 'blob' })
+            const blobUrl = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = blobUrl
+            a.download = `${hostSlug()}_api.zip`
+            a.click()
+            URL.revokeObjectURL(blobUrl)
+        } finally {
+            setApiZipping(false)
+        }
     }
 
     return (
@@ -699,6 +725,25 @@ const FunctionBuilderPanel = ({
                             '
                         >
                             {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {canApiService && (
+                <div className='mt-4 flex flex-col gap-2'>
+                    <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>REST API Service</div>
+                    <p className='text-xs text-gray-500'>
+                        A standalone Flask + SQLAlchemy service built from the same List function(s) above — crawl_db.py scrapes into
+                        a small database, app.py serves it over HTTP. Deployable on its own, separate from this app.
+                    </p>
+                    <div>
+                        <button
+                            onClick={handleDownloadApiService}
+                            disabled={apiZipping}
+                            className={`px-3 py-1.5 ${glossyGreenButtonClass}`}
+                        >
+                            {apiZipping ? 'Zipping…' : 'Download API service (.zip)'}
                         </button>
                     </div>
                 </div>
