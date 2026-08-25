@@ -15,6 +15,14 @@ export interface ExportOptions {
     // every page's items into one flat list. Single-page functions in the
     // same script are unaffected (there's only ever one page for those).
     perPageJson?: boolean
+    // Two fixes the Review panel can flag and one-click apply — off by
+    // default so they don't change existing generated code unasked.
+    // politeDelay: only meaningful in crawl mode — sleeps between page
+    // requests instead of firing them back-to-back.
+    politeDelay?: boolean
+    // retryOnFailure: wraps fetch_soup's request in a retry-with-backoff
+    // loop instead of letting one flaky request kill the whole run.
+    retryOnFailure?: boolean
 }
 
 export const pyStr = (s: string): string => JSON.stringify(s)
@@ -159,20 +167,8 @@ const genFunction = (name: string, config: FnConfig): string => {
 
 const genPreamble = (sourceUrl: string, needsUrljoin: boolean, exportOptions: ExportOptions): string => {
     const pipPackages = ['requests', 'beautifulsoup4', 'html5lib', ...(exportOptions.xlsx ? ['openpyxl'] : [])]
-    return [
-        `# pip install ${pipPackages.join(' ')}`,
-        'import requests',
-        exportOptions.json ? 'import json' : null,
-        needsUrljoin ? 'from urllib.parse import urljoin' : null,
-        'from bs4 import BeautifulSoup',
-        exportOptions.xlsx ? 'from openpyxl import Workbook' : null,
-        '',
-        `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
-        '',
-        '',
-        'def fetch_soup(url=URL):',
-        '    response = requests.get(url, timeout=10)',
-        '    response.raise_for_status()',
+    const needsTime = Boolean(exportOptions.politeDelay || exportOptions.retryOnFailure)
+    const parseComment = [
         '    # html5lib (not html.parser) parses the way a browser renders —',
         '    # e.g. it inserts the <tbody> browsers always add to tables, which',
         '    # selectors picked from the live preview rely on.',
@@ -181,7 +177,43 @@ const genPreamble = (sourceUrl: string, needsUrljoin: boolean, exportOptions: Ex
         '    # Content-Type: text/html with no charset makes requests guess',
         '    # ISO-8859-1 even when the body is actually UTF-8, silently mangling',
         '    # non-ASCII text. Raw bytes let BeautifulSoup detect the real encoding.',
-        '    return BeautifulSoup(response.content, "html5lib")',
+    ]
+    const fetchSoupDef = exportOptions.retryOnFailure
+        ? [
+            'def fetch_soup(url=URL, max_retries=3):',
+            '    # Retries with exponential backoff (1s, 2s, 4s, ...) instead of letting',
+            '    # one flaky request kill an entire multi-page crawl.',
+            '    for attempt in range(max_retries):',
+            '        try:',
+            '            response = requests.get(url, timeout=10)',
+            '            response.raise_for_status()',
+            ...parseComment.map(l => '        ' + l),
+            '            return BeautifulSoup(response.content, "html5lib")',
+            '        except requests.RequestException:',
+            '            if attempt == max_retries - 1:',
+            '                raise',
+            '            time.sleep(2 ** attempt)',
+        ]
+        : [
+            'def fetch_soup(url=URL):',
+            '    response = requests.get(url, timeout=10)',
+            '    response.raise_for_status()',
+            ...parseComment,
+            '    return BeautifulSoup(response.content, "html5lib")',
+        ]
+    return [
+        `# pip install ${pipPackages.join(' ')}`,
+        'import requests',
+        needsTime ? 'import time' : null,
+        exportOptions.json ? 'import json' : null,
+        needsUrljoin ? 'from urllib.parse import urljoin' : null,
+        'from bs4 import BeautifulSoup',
+        exportOptions.xlsx ? 'from openpyxl import Workbook' : null,
+        '',
+        `URL = ${pyStr(sourceUrl.trim() || 'https://example.com')}`,
+        '',
+        '',
+        ...fetchSoupDef,
     ].filter((l): l is string => l !== null).join('\n')
 }
 
@@ -265,12 +297,14 @@ const genCrawlMain = (
     // *during* the crawl — results is already merged flat by the time
     // crawl() returns, and there's no way to un-merge it afterward.
     const perPage = Boolean(exportOptions.json && exportOptions.perPageJson)
+    const politeDelay = Boolean(exportOptions.politeDelay)
 
     const crawlDef = config.mode === 'url_pattern'
         ? [
             `URL_TEMPLATE = ${pyStr(config.urlTemplate)}`,
             `START_PAGE = ${config.startPage}`,
             `END_PAGE = ${config.endPage}`,
+            politeDelay ? 'REQUEST_DELAY = 1  # seconds between page requests' : null,
             '',
             '',
             'def crawl():',
@@ -289,10 +323,12 @@ const genCrawlMain = (
                     '            by_page[name][f"page_{page}"] = items',
                 ]
                 : ['            results[name].extend(fn(soup))']),
+            politeDelay ? '        time.sleep(REQUEST_DELAY)' : null,
             perPage ? '    return results, by_page' : '    return results',
-        ].join('\n')
+        ].filter((l): l is string => l !== null).join('\n')
         : [
             'MAX_PAGES = 20',
+            politeDelay ? 'REQUEST_DELAY = 1  # seconds between page requests' : null,
             '',
             '',
             'def crawl(start_url=URL, max_pages=MAX_PAGES):',
@@ -315,8 +351,9 @@ const genCrawlMain = (
             `        next_href = ${names.get(paginationFn.id)!}(soup)`,
             '        url = urljoin(url, next_href) if next_href else None',
             '        pages += 1',
+            politeDelay ? '        time.sleep(REQUEST_DELAY)' : null,
             perPage ? '    return results, by_page' : '    return results',
-        ].join('\n')
+        ].filter((l): l is string => l !== null).join('\n')
 
     const main = [
         'if __name__ == "__main__":',
@@ -377,8 +414,12 @@ export const generatePythonCode = (functions: FnGroup[], sourceUrl: string, expo
     // url_pattern mode uses str.format(), not urljoin — only 'link' mode
     // resolves a possibly-relative href against the current page's URL.
     const needsUrljoin = crawlMode && !isUrlPatternMode
+    // politeDelay only ever inserts a time.sleep() inside a crawl loop — outside
+    // crawl mode there's nothing to insert it into, so drop it here rather than
+    // importing `time` for nothing in the single-page case.
+    const effectiveOptions: ExportOptions = { ...exportOptions, politeDelay: crawlMode && exportOptions.politeDelay }
 
-    const preamble = genPreamble(sourceUrl, needsUrljoin, exportOptions)
+    const preamble = genPreamble(sourceUrl, needsUrljoin, effectiveOptions)
     // In crawl mode, a url_pattern pagination function has no def of its own
     // (see genFunction) — its template/range go straight into crawl().
     const bodyFns = crawlMode && isUrlPatternMode
@@ -386,8 +427,8 @@ export const generatePythonCode = (functions: FnGroup[], sourceUrl: string, expo
         : functions
     const body = bodyFns.map(fn => genFunction(names.get(fn.id)!, fn.config)).join('\n\n\n')
     const main = crawlMode
-        ? genCrawlMain(functions, names, paginationFn, listFns, exportOptions)
-        : genSimpleMain(functions, names, exportOptions)
+        ? genCrawlMain(functions, names, paginationFn, listFns, effectiveOptions)
+        : genSimpleMain(functions, names, effectiveOptions)
 
     return [preamble, body, main].join('\n\n\n') + '\n'
 }

@@ -208,6 +208,55 @@ describe('generatePythonCode', () => {
         expect(code).toContain('results = crawl()')
     })
 
+    it('wraps fetch_soup in a retry loop when retryOnFailure is enabled', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
+        const code = generatePythonCode(functions, 'https://example.com', { retryOnFailure: true })
+        expect(code).toContain('import time')
+        expect(code).toContain('def fetch_soup(url=URL, max_retries=3):')
+        expect(code).toContain('for attempt in range(max_retries):')
+        expect(code).toContain('except requests.RequestException:')
+        expect(code).toContain('time.sleep(2 ** attempt)')
+    })
+
+    it('does not touch fetch_soup when retryOnFailure is off', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
+        const code = generatePythonCode(functions, 'https://example.com')
+        expect(code).toContain('def fetch_soup(url=URL):')
+        expect(code).not.toContain('import time')
+        expect(code).not.toContain('max_retries')
+    })
+
+    it('adds a delay between page requests in a crawl loop when politeDelay is enabled', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            {
+                id: '2', name: 'paginate',
+                config: { category: 'pagination', mode: 'url_pattern', urlTemplate: 'https://example.com/page-{page}.html', startPage: 1, endPage: 5 },
+            },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { politeDelay: true })
+        expect(code).toContain('import time')
+        expect(code).toContain('REQUEST_DELAY = 1')
+        expect(code).toContain('time.sleep(REQUEST_DELAY)')
+    })
+
+    it('ignores politeDelay outside crawl mode (nothing to insert it into)', () => {
+        const functions: FnGroup[] = [{ id: '1', name: 'get_title', config: header(ref('h1')) }]
+        const code = generatePythonCode(functions, 'https://example.com', { politeDelay: true })
+        expect(code).not.toContain('import time')
+        expect(code).not.toContain('REQUEST_DELAY')
+    })
+
+    it('adds a delay in the link-follow crawl loop too, when politeDelay is enabled', () => {
+        const functions: FnGroup[] = [
+            { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },
+            { id: '2', name: 'get_next', config: { category: 'pagination', mode: 'link', next: ref('#next', 'a') } },
+        ]
+        const code = generatePythonCode(functions, 'https://example.com', { politeDelay: true })
+        expect(code).toContain('time.sleep(REQUEST_DELAY)')
+        expect(code).toContain('from urllib.parse import urljoin')
+    })
+
     it('supports both export formats together in crawl mode, keyed by the results dict', () => {
         const functions: FnGroup[] = [
             { id: '1', name: 'get_jobs', config: { category: 'list', item: ref('tr'), fields: [] } },

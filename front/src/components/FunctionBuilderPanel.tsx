@@ -4,6 +4,7 @@ import type { ElementRef, ExtractMode, FnCategory, FnConfig, FnGroup } from '../
 import { CATEGORY_LABELS, MAIN_SLOT_LABELS, summarizeFn } from '../types/builder'
 import { generatePythonCode } from '../lib/codegen'
 import { canGenerateApiService, generateApiService } from '../lib/apiCodegen'
+import { reviewFunctions } from '../lib/codeReview'
 import type { ExtractionResult } from '../lib/extract'
 import type { FieldCandidate } from '../lib/autoFields'
 import { suggestUrlTemplate } from '../lib/urlPattern'
@@ -253,15 +254,19 @@ const FunctionBuilderPanel = ({
     const [exportJson, setExportJson] = useState(false)
     const [exportXlsx, setExportXlsx] = useState(false)
     const [perPageJson, setPerPageJson] = useState(false)
-    // Per-page JSON only means anything once a List function is actually
-    // being crawled across multiple pages by a Pagination function.
+    const [politeDelay, setPoliteDelay] = useState(false)
+    const [retryOnFailure, setRetryOnFailure] = useState(false)
+    // Per-page JSON (and the politeDelay fix) only mean anything once a List
+    // function is actually being crawled across multiple pages by a
+    // Pagination function.
     const crawlMode = functions.some(fn => fn.config.category === 'pagination')
         && functions.some(fn => fn.config.category === 'list')
     const exportOptions = useMemo(
-        () => ({ json: exportJson, xlsx: exportXlsx, perPageJson: perPageJson && crawlMode }),
-        [exportJson, exportXlsx, perPageJson, crawlMode]
+        () => ({ json: exportJson, xlsx: exportXlsx, perPageJson: perPageJson && crawlMode, politeDelay, retryOnFailure }),
+        [exportJson, exportXlsx, perPageJson, crawlMode, politeDelay, retryOnFailure]
     )
     const code = useMemo(() => generatePythonCode(functions, sourceUrl, exportOptions), [functions, sourceUrl, exportOptions])
+    const reviewFindings = useMemo(() => reviewFunctions(functions), [functions])
     const [copied, setCopied] = useState(false)
 
     const handleCopy = async () => {
@@ -668,6 +673,50 @@ const FunctionBuilderPanel = ({
                             })}
                         </div>
                     )}
+                </div>
+            )}
+
+            {functions.length > 0 && (
+                <div className='mt-4 flex flex-col gap-2'>
+                    <div className='font-sans font-extrabold text-xs tracking-[0.12em] uppercase text-[#3a3d42]'>Review</div>
+                    <p className='text-xs text-gray-500'>
+                        Deterministic checks against what's about to be generated — no network calls, nothing sent anywhere.
+                    </p>
+
+                    {reviewFindings.length > 0 ? (
+                        <div className='flex flex-col gap-1.5'>
+                            {reviewFindings.map(f => (
+                                <div key={f.id} className='text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5'>
+                                    ⚠ {f.message}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className='text-xs text-[#166534]'>✓ No fragile selectors found.</p>
+                    )}
+
+                    <div className='flex flex-col gap-1.5 mt-1'>
+                        <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
+                            <input
+                                type='checkbox'
+                                checked={retryOnFailure}
+                                onChange={e => setRetryOnFailure(e.target.checked)}
+                                className='accent-[#2b6b3f]'
+                            />
+                            Retry failed requests (exponential backoff, up to 3 attempts) — one flaky request won't kill the run
+                        </label>
+                        {crawlMode && (
+                            <label className='flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer select-none'>
+                                <input
+                                    type='checkbox'
+                                    checked={politeDelay}
+                                    onChange={e => setPoliteDelay(e.target.checked)}
+                                    className='accent-[#2b6b3f]'
+                                />
+                                Add a 1s delay between page requests — avoids hammering the site during a multi-page crawl
+                            </label>
+                        )}
+                    </div>
                 </div>
             )}
 
