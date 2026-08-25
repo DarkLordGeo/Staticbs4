@@ -570,6 +570,11 @@ const FunctionBuilderPanel = ({
                         {!draftConfig.item && (
                             <span className='text-xs text-gray-400'>Pick the item element first.</span>
                         )}
+                        {draftConfig.item && draftConfig.fields.length === 0 && (
+                            <span className='text-xs text-gray-400'>
+                                No fields added — that's fine, each item will extract as plain text. Add a field only if you need separate values per item.
+                            </span>
+                        )}
                     </div>
                 )}
 

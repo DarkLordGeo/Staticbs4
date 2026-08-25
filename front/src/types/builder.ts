@@ -89,7 +89,11 @@ export const isConfigComplete = (config: FnConfig): boolean => {
         case 'header': return config.target !== null
         case 'text': return config.target !== null
         case 'links': return config.container !== null
-        case 'list': return config.item !== null && config.fields.length > 0
+        // No fields is valid on its own — codegen/extract both fall back to
+        // the whole item's text (item.get_text()) when there's nothing more
+        // specific picked, which is exactly right for a plain list of text
+        // items (<li>Item A</li>) with no sub-structure to pick a field from.
+        case 'list': return config.item !== null
         case 'table': return config.table !== null
         case 'pagination':
             return config.mode === 'link'
@@ -104,7 +108,9 @@ export const summarizeFn = (fn: FnGroup): string => {
         case 'header': return `${c.target ? `<${c.target.tag}>` : 'no target'} · ${extractModeLabel(c.extract)}`
         case 'text': return `${c.target ? `<${c.target.tag}>` : 'no target'} · ${extractModeLabel(c.extract)}`
         case 'links': return `${c.container ? `<${c.container.tag}>` : 'no container'} · extract ${c.extract}`
-        case 'list': return `${c.item ? `<${c.item.tag}>` : 'no item'} · ${c.fields.length} field${c.fields.length === 1 ? '' : 's'}`
+        case 'list': return `${c.item ? `<${c.item.tag}>` : 'no item'} · ${
+            c.fields.length === 0 ? 'whole item text' : `${c.fields.length} field${c.fields.length === 1 ? '' : 's'}`
+        }`
         case 'table': return `${c.table ? '<table>' : 'no table'} · header row: ${c.firstRowIsHeader ? 'yes' : 'no'}`
         case 'pagination':
             return c.mode === 'link'
